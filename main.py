@@ -5,13 +5,14 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(__file__))
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
 
-from modules.notion_parser  import parse_task_from_block
+from modules.notion_parser  import parse_task_from_block, get_my_tasks
 from modules.image_analyzer import prepare_images
 from modules.claude_pipeline import run_pipeline
 
@@ -23,7 +24,13 @@ load_dotenv()
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
-app = FastAPI(title="수행평가 대시보드")
+@asynccontextmanager
+async def lifespan(app):
+    asyncio.get_event_loop().run_in_executor(None, get_my_tasks)
+    yield
+
+
+app = FastAPI(title="수행평가 대시보드", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -35,17 +42,27 @@ templates = Jinja2Templates(directory="templates")
 # ──────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    """Notion 링크 입력 페이지 (단일 과업만 처리)"""
-    return templates.TemplateResponse(
-        request=request,
-        name="dashboard.html",
-        context={}
+    return templates.TemplateResponse(request=request, name="dashboard.html", context={})
+
+
+@app.get("/api/my-tasks")
+async def api_my_tasks(refresh: bool = False):
+    """내 과업 목록 반환 (캐시 / 로딩 중이면 status=loading)"""
+    result = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: get_my_tasks(force=refresh)
     )
+    return JSONResponse(result)
 
 
 # ──────────────────────────────────────────────
 # 2. 과업 상세
 # ──────────────────────────────────────────────
+@app.get("/api/debug-task/{block_id}")
+async def debug_task(block_id: str):
+    task = parse_task_from_block(block_id)
+    return JSONResponse({k: v for k, v in task.items() if not isinstance(v, list) or k in ("attachments","guide_files","bio_files")})
+
+
 @app.get("/task/{block_id}", response_class=HTMLResponse)
 async def task_detail(request: Request, block_id: str):
     try:

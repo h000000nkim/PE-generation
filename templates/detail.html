@@ -5,132 +5,380 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{ task.title }} - 상세</title>
 <link rel="stylesheet" href="/static/style.css">
+<style>
+  header { margin-bottom: 1.5rem; }
+  header .back { color: #888; text-decoration: none; font-size: 0.9rem; }
+  header .back:hover { color: #333; }
+  header h1 { font-size: 1.4rem; margin: 8px 0 0; font-weight: 700; }
+
+  .section-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #fff;
+    padding: 3px 10px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-bottom: 14px;
+  }
+  .section-label.student { background: #3b82f6; }
+  .section-label.task    { background: #10b981; }
+  .section-label.memo    { background: #8b5cf6; }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+  .card { background: white; border: 1px solid #e5e5e5; border-radius: 12px; padding: 20px; }
+  .card.full { grid-column: 1 / -1; }
+
+  .info-table { width: 100%; border-collapse: collapse; }
+  .info-table tr + tr td,
+  .info-table tr + tr th { border-top: 1px solid #f0f0f0; }
+  .info-table th {
+    width: 110px; padding: 8px 0; font-size: 0.8rem;
+    color: #888; font-weight: 600; text-align: left; vertical-align: top;
+  }
+  .info-table td { padding: 8px 0; font-size: 0.9rem; vertical-align: top; }
+
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 20px;
+    font-size: 0.78rem; font-weight: 600;
+    background: #f5f5f5; color: #333;
+  }
+  .badge.warn  { background: #fff3cd; color: #856404; }
+  .badge.ok    { background: #d4edda; color: #155724; }
+  .badge.info  { background: #cce5ff; color: #004085; }
+
+  .file-list { list-style: none; margin: 0; padding: 0; }
+  .file-list li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid #f0f0f0; font-size: 0.85rem; }
+  .file-list li:first-child { border-top: none; }
+  .file-list a { color: #3b82f6; text-decoration: none; }
+  .file-list a:hover { text-decoration: underline; }
+  .file-icon { font-size: 1rem; }
+
+  .request-pre {
+    white-space: pre-wrap; font-size: 0.85rem; line-height: 1.8;
+    background: #f9f9f9; padding: 14px; border-radius: 8px;
+    max-height: 240px; overflow-y: auto; margin: 0;
+  }
+
+  textarea {
+    width: 100%; box-sizing: border-box;
+    border: 1px solid #e0e0e0; border-radius: 8px;
+    padding: 12px; font-size: 0.9rem; font-family: inherit;
+    resize: vertical; transition: border-color 0.2s;
+  }
+  textarea:focus { outline: none; border-color: #3b82f6; }
+
+  .action-bar { margin-top: 20px; display: flex; gap: 10px; }
+  .btn-primary {
+    padding: 12px 28px; background: #10b981; color: white;
+    border: none; border-radius: 8px; font-size: 0.95rem;
+    font-weight: 600; cursor: pointer; transition: background 0.2s;
+  }
+  .btn-primary:hover { background: #059669; }
+  .btn-primary:disabled { opacity: 0.5; cursor: default; }
+
+  /* 결과 */
+  .result-card { margin-top: 20px; }
+  #result-body {
+    white-space: pre-wrap; font-size: 0.88rem; line-height: 1.8;
+    background: #f9f9f9; padding: 16px; border-radius: 8px; min-height: 80px;
+  }
+  #ref-list { list-style: none; padding: 0; font-size: 0.83rem; line-height: 2; }
+  #cost-info { font-size: 0.75rem; color: #aaa; margin-top: 6px; }
+  .hidden { display: none !important; }
+
+  /* 과거 과제 목록 */
+  .section-label.history { background: #f59e0b; }
+  .past-task-list { list-style: none; margin: 0; padding: 0; }
+  .past-task-item {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 8px 0; border-top: 1px solid #f0f0f0; font-size: 0.88rem;
+  }
+  .past-task-item:first-child { border-top: none; }
+  .past-task-item a { color: #1d4ed8; text-decoration: none; flex: 1; }
+  .past-task-item a:hover { text-decoration: underline; }
+  .past-task-meta { font-size: 0.75rem; color: #999; white-space: nowrap; }
+  .past-task-status {
+    font-size: 0.72rem; font-weight: 600; padding: 1px 7px;
+    border-radius: 10px; white-space: nowrap;
+  }
+  .past-task-status.done     { background: #d4edda; color: #155724; }
+  .past-task-status.progress { background: #cce5ff; color: #004085; }
+  .past-task-status.pending  { background: #f5f5f5; color: #555; }
+</style>
 </head>
 <body>
 <div class="container">
+
   <header>
     <a href="/" class="back">← 목록으로</a>
     <h1>{{ task.title }}</h1>
   </header>
 
-  <div class="detail-grid">
+  <div class="two-col">
 
-    <!-- 왼쪽: 과제 정보 -->
-    <section class="card">
-      <h2>과제 정보</h2>
+    <!-- ① 학생 정보 -->
+    <div class="card">
+      <span class="section-label student">학생 정보</span>
       <table class="info-table">
-        <tr><th>이름</th><td>{{ task.name or '정보없음' }}</td></tr>
-        <tr><th>원하는 전공</th><td>{{ task.major or '정보없음' }}</td></tr>
-        <tr><th>과목</th><td>{{ task.subject }}</td></tr>
-        <tr><th>학년/학기</th><td>{{ task.grade }} {{ task.semester }}</td></tr>
-        <tr><th>활동유형</th><td>{{ task.activity }}</td></tr>
-        <tr><th>제출방식</th><td>{{ task.submit_type }}</td></tr>
-        <tr><th>진행상태</th><td><span class="badge">{{ task.status }}</span></td></tr>
+        <tr>
+          <th>이름</th>
+          <td>{{ task.name or '—' }}</td>
+        </tr>
+        <tr>
+          <th>학년</th>
+          <td>{{ task.grade or '—' }}</td>
+        </tr>
+        <tr>
+          <th>학교</th>
+          <td>{{ task.school or '—' }}</td>
+        </tr>
+        <tr>
+          <th>원하는 전공</th>
+          <td>{{ task.major or '—' }}</td>
+        </tr>
+        <tr>
+          <th>학생 코드</th>
+          <td>{{ task.student_code or '—' }}</td>
+        </tr>
+        <tr>
+          <th>등록여부</th>
+          <td>
+            {% if task.reg_status %}
+              <span class="badge ok">{{ task.reg_status }}</span>
+            {% else %}—{% endif %}
+            {% if task.flag %} <span style="font-size:1.1rem">{{ task.flag }}</span>{% endif %}
+          </td>
+        </tr>
+        {% if task.phone %}
+        <tr>
+          <th>전화번호</th>
+          <td>{{ task.phone }}{% if task.phone2 %} / {{ task.phone2 }}{% endif %}</td>
+        </tr>
+        {% endif %}
+        {% if task.target_dept %}
+        <tr>
+          <th>목표 학과</th>
+          <td>{{ task.target_dept }}</td>
+        </tr>
+        {% endif %}
+        {% if task.affiliation %}
+        <tr>
+          <th>소속</th>
+          <td>{{ task.affiliation }}</td>
+        </tr>
+        {% endif %}
+        {% if task.alias %}
+        <tr>
+          <th>동명이인</th>
+          <td>{{ task.alias }}</td>
+        </tr>
+        {% endif %}
+        {% if task.bio_direction %}
+        <tr>
+          <th>생기부 방향성</th>
+          <td><pre style="margin:0;white-space:pre-wrap;font-size:0.82rem;line-height:1.7;background:#f9f9f9;padding:10px;border-radius:6px;max-height:180px;overflow-y:auto">{{ task.bio_direction }}</pre></td>
+        </tr>
+        {% endif %}
+        {% if task.study_range %}
+        <tr>
+          <th>시험범위 / 수업내용</th>
+          <td><pre style="margin:0;white-space:pre-wrap;font-size:0.82rem;line-height:1.7;background:#f9f9f9;padding:10px;border-radius:6px;max-height:180px;overflow-y:auto">{{ task.study_range }}</pre></td>
+        </tr>
+        {% endif %}
+        {% if task.bio_files %}
+        <tr>
+          <th>생기부 파일</th>
+          <td>
+            <ul class="file-list">
+              {% for f in task.bio_files %}
+              <li>
+                <span class="file-icon">📄</span>
+                {% if f.url %}<a href="{{ f.url }}" target="_blank">{{ f.name }}</a>
+                {% else %}{{ f.name }}{% endif %}
+              </li>
+              {% endfor %}
+            </ul>
+          </td>
+        </tr>
+        {% endif %}
+        {% for ef in task.extra_fields %}
+        <tr>
+          <th style="color:#aaa;font-size:0.75rem">{{ ef.key }}</th>
+          <td style="font-size:0.82rem;color:#555;white-space:pre-wrap">{{ ef.value[:200] }}</td>
+        </tr>
+        {% endfor %}
       </table>
-    </section>
+    </div>
 
-    <!-- 오른쪽: 첨부파일 -->
-    <section class="card">
-      <h2>첨부파일 ({{ image_meta | length }}개)</h2>
-      {% if image_meta %}
+    <!-- ② 과제 정보 -->
+    <div class="card">
+      <span class="section-label task">과제 정보</span>
+      <table class="info-table">
+        <tr>
+          <th>수행평가 과목</th>
+          <td>{{ task.subject or '—' }}</td>
+        </tr>
+        <tr>
+          <th>학기</th>
+          <td>{{ task.semester or '—' }}</td>
+        </tr>
+        <tr>
+          <th>수행평가 형식</th>
+          <td>{{ task.submit_type or '—' }}</td>
+        </tr>
+        <tr>
+          <th>컨설팅 종류</th>
+          <td>{{ task.activity or '—' }}</td>
+        </tr>
+        <tr>
+          <th>진행 상태</th>
+          <td>
+            <span class="badge {% if '완료' in (task.status or '') %}ok{% elif '진행' in (task.status or '') %}info{% else %}warn{% endif %}">
+              {{ task.status or '—' }}
+            </span>
+          </td>
+        </tr>
+        {% if task.apply_date %}
+        <tr>
+          <th>신청일</th>
+          <td>{{ task.apply_date }}</td>
+        </tr>
+        {% endif %}
+        {% if task.due_date %}
+        <tr>
+          <th>학교 제출일</th>
+          <td>{{ task.due_date }}</td>
+        </tr>
+        {% endif %}
+        <tr>
+          <th>요청사항 확인</th>
+          <td>
+            {% if task.req_check %}
+              <span class="badge {% if '확인요망' in task.req_check %}warn{% else %}ok{% endif %}">{{ task.req_check }}</span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        <tr>
+          <th>평가기준 확인</th>
+          <td>
+            {% if task.eval_check %}
+              <span class="badge {% if '확인요망' in task.eval_check %}warn{% else %}ok{% endif %}">{{ task.eval_check }}</span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% if task.keyword %}
+        <tr>
+          <th>키워드</th>
+          <td>{{ task.keyword }}</td>
+        </tr>
+        {% endif %}
+        {% if task.note %}
+        <tr>
+          <th>비고</th>
+          <td>{{ task.note }}</td>
+        </tr>
+        {% endif %}
+      </table>
+    </div>
+
+    <!-- ③ 평가기준 및 양식 파일 -->
+    {% if task.attachments or task.guide_files %}
+    <div class="card full">
+      <span class="section-label task">첨부 파일</span>
+      {% if task.attachments %}
+      <p style="font-size:0.8rem;color:#888;margin:0 0 6px">평가기준 및 양식 ({{ task.attachments|length }}개)</p>
       <ul class="file-list">
-        {% for img in image_meta %}
+        {% for f in task.attachments %}
         <li>
-          <span class="filename">{{ img.name }}</span>
-          <span class="token-badge">~{{ img.tokens | int }} tokens</span>
+          <span class="file-icon">📎</span>
+          {% if f.url %}<a href="{{ f.url }}" target="_blank">{{ f.name }}</a>
+          {% else %}{{ f.name }}{% endif %}
         </li>
         {% endfor %}
       </ul>
-      {% else %}
-      <p class="muted">첨부파일 없음</p>
       {% endif %}
-    </section>
-
-    <!-- 요청사항 -->
-    <section class="card full-width">
-      <h2>요청사항 / 선생님 안내</h2>
-      <pre class="request-text">{{ task.request_msg or '내용 없음' }}</pre>
-    </section>
-
-    <!-- 내 아이디어 메모 -->
-    <section class="card full-width">
-      <h2>✏️ 내 아이디어 메모</h2>
-      <textarea id="memo" placeholder="주제, 방향, 포함할 내용 등 자유롭게 메모하세요..." rows="5"></textarea>
-    </section>
-
-  </div>
-
-  <!-- 5단계 파이프라인 결과 -->
-  <div id="result-section" class="card full-width hidden" style="margin-top:20px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <h2>결과</h2>
-      <span id="step-indicator" style="font-size:0.85rem;color:#555"></span>
+      {% if task.guide_files %}
+      <p style="font-size:0.8rem;color:#888;margin:12px 0 6px">수행평가 가이드 ({{ task.guide_files|length }}개)</p>
+      <ul class="file-list">
+        {% for f in task.guide_files %}
+        <li>
+          <span class="file-icon">📋</span>
+          {% if f.url %}<a href="{{ f.url }}" target="_blank">{{ f.name }}</a>
+          {% else %}{{ f.name }}{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
     </div>
-    <pre id="result-body" style="white-space:pre-wrap;font-size:0.9rem;line-height:1.8;background:#f9f9f9;padding:16px;border-radius:8px;min-height:100px"></pre>
-    <button onclick="navigator.clipboard.writeText(document.getElementById('result-body').textContent)"
-            style="margin-top:8px;padding:6px 14px;border:1px solid #ccc;border-radius:8px;cursor:pointer;font-size:0.82rem">📋 복사</button>
-    <h2 style="margin-top:20px;margin-bottom:8px">참고자료 검증</h2>
-    <ul id="ref-list" style="list-style:none;font-size:0.85rem;line-height:2"></ul>
-    <div id="cost-info" style="margin-top:8px;font-size:0.78rem;color:#aaa"></div>
+    {% endif %}
+
+    <!-- ④ 요청사항 -->
+    <div class="card full">
+      <span class="section-label task">요청사항 / 선생님 안내</span>
+      <pre class="request-pre">{{ task.request_msg or '내용 없음' }}</pre>
+    </div>
+
+    <!-- ⑤ 세부능력 및 특기사항 -->
+    {% if task.setech %}
+    <div class="card full">
+      <span class="section-label student">세부능력 및 특기사항</span>
+      <pre class="request-pre">{{ task.setech }}</pre>
+    </div>
+    {% endif %}
+
+    <!-- ⑥ 지금까지 한 과제 목록 -->
+    {% if task.past_tasks %}
+    <div class="card full">
+      <span class="section-label history">지금까지 한 과제 ({{ task.past_tasks|length }}개)</span>
+      <ul class="past-task-list">
+        {% for pt in task.past_tasks %}
+        {% set sc = 'done' if ('완료' in (pt.status or '') or 'done' in (pt.status or '')|lower) else ('progress' if ('진행' in (pt.status or '') or '중' in (pt.status or '')) else 'pending') %}
+        <li class="past-task-item">
+          <a href="/task/{{ pt.block_id }}" target="_blank">{{ pt.title or '(제목 없음)' }}</a>
+          {% if pt.subject %}<span class="past-task-meta">{{ pt.subject }}</span>{% endif %}
+          {% if pt.semester %}<span class="past-task-meta">{{ pt.semester }}</span>{% endif %}
+          {% if pt.due_date %}<span class="past-task-meta">{{ pt.due_date }}</span>{% endif %}
+          {% if pt.status %}<span class="past-task-status {{ sc }}">{{ pt.status }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <!-- ⑦ 내 아이디어 메모 -->
+    <div class="card full">
+      <span class="section-label memo">내 아이디어 메모</span>
+      <textarea id="memo" placeholder="주제, 방향, 포함할 내용 등 자유롭게 메모하세요..." rows="4"></textarea>
+    </div>
+
   </div>
 
-  <!-- 검토 화면으로 -->
+  <!-- 실행 버튼 -->
   <div class="action-bar">
-    <button class="btn-primary" onclick="sendToClaude()">Claude 5단계 작성 시작 →</button>
+    <button class="btn-primary" id="runBtn" onclick="sendToClaude()">Claude 5단계 작성 시작 →</button>
   </div>
 
-  <!-- 미리보기 모달 -->
-  <div id="modal" class="modal hidden">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3>Claude 작업 지시서 미리보기</h3>
-        <button onclick="closeModal()">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="meta-row">
-          <span id="img-count"></span>
-          <span id="token-count"></span>
-        </div>
-        <h4>시스템 프롬프트</h4>
-        <pre id="preview-system"></pre>
-        <h4>유저 메시지</h4>
-        <pre id="preview-user"></pre>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeModal()">닫기</button>
-        <button class="btn-primary" id="sendBtn" onclick="sendToClaude()">Claude에 전송 →</button>
-      </div>
+  <!-- 결과 -->
+  <div id="result-section" class="card result-card hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <strong>결과</strong>
+      <span id="step-indicator" style="font-size:0.82rem;color:#555"></span>
     </div>
-  </div>
-
-  <!-- Claude 응답 모달 -->
-  <div id="responseModal" class="modal hidden">
-    <div class="modal-box" style="max-width: 900px;">
-      <div class="modal-header">
-        <h3>📝 Claude 응답</h3>
-        <button onclick="closeResponseModal()">✕</button>
-      </div>
-      <div class="modal-body">
-        <div id="loadingSpinner" style="text-align: center; padding: 40px;">
-          <div style="font-size: 3rem;">⏳</div>
-          <p>Claude가 작성 중입니다...</p>
-        </div>
-        <div id="responseContent" style="display: none;">
-          <div class="meta-row" style="margin-bottom: 15px;">
-            <span id="usage-info"></span>
-          </div>
-          <pre id="claude-response" style="white-space: pre-wrap; line-height: 1.6;"></pre>
-        </div>
-        <div id="errorContent" style="display: none; color: #f44336; padding: 20px;">
-          <h4>오류 발생</h4>
-          <pre id="error-message"></pre>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeResponseModal()">닫기</button>
-        <button class="btn-primary" onclick="copyResponse()">📋 복사</button>
-      </div>
-    </div>
+    <pre id="result-body"></pre>
+    <button onclick="navigator.clipboard.writeText(document.getElementById('result-body').textContent)"
+            style="margin-top:8px;padding:6px 14px;border:1px solid #ccc;border-radius:8px;cursor:pointer;font-size:0.8rem">📋 복사</button>
+    <h3 style="margin:16px 0 6px;font-size:0.9rem">참고자료 검증</h3>
+    <ul id="ref-list"></ul>
+    <div id="cost-info"></div>
   </div>
 
 </div>
@@ -138,71 +386,39 @@
 <script>
 const BLOCK_ID = "{{ task.block_id }}";
 
-async function buildPrompt() {
-  const memo = document.getElementById("memo").value;
-  const form = new FormData();
-  form.append("block_id", BLOCK_ID);
-  form.append("user_memo", memo);
-
-  const btn = document.querySelector(".btn-primary");
-  btn.textContent = "조립 중...";
-  btn.disabled = true;
-
-  try {
-    const res  = await fetch("/api/build-prompt", { method: "POST", body: form });
-    const data = await res.json();
-
-    document.getElementById("preview-system").textContent = data.system;
-    document.getElementById("preview-user").textContent   = data.user_text;
-    document.getElementById("img-count").textContent      = `🖼 이미지 ${data.image_count}장`;
-    document.getElementById("token-count").textContent    = `📊 예상 입력 토큰 ~${data.estimated_input_tokens.toLocaleString()}`;
-
-    document.getElementById("modal").classList.remove("hidden");
-  } catch(e) {
-    alert("오류: " + e.message);
-  } finally {
-    btn.textContent = "Claude 작업 지시서 미리보기 →";
-    btn.disabled    = false;
-  }
-}
-
-function closeModal() {
-  document.getElementById("modal").classList.add("hidden");
-}
-
-function closeResponseModal() {
-  document.getElementById("responseModal").classList.add("hidden");
-}
-
 async function sendToClaude() {
   const memo = document.getElementById("memo").value;
   const form = new FormData();
   form.append("block_id", BLOCK_ID);
   form.append("user_memo", memo);
-  form.append("test_mode", "true");  // 테스트 모드 활성화
+  form.append("test_mode", "true");
+
+  const btn = document.getElementById("runBtn");
+  btn.disabled = true;
+  btn.textContent = "작성 중...";
 
   document.getElementById("result-section").classList.remove("hidden");
   document.getElementById("result-body").textContent = "";
   document.getElementById("ref-list").innerHTML = "";
   document.getElementById("step-indicator").textContent = "🔄 준비 중...";
 
-  const resp   = await fetch("/api/run-claude", {method:"POST", body:form});
+  const resp   = await fetch("/api/run-claude", { method: "POST", body: form });
   const reader = resp.body.getReader();
   const dec    = new TextDecoder();
 
   while (true) {
-    const {done, value} = await reader.read();
+    const { done, value } = await reader.read();
     if (done) break;
     for (const line of dec.decode(value).split("\n")) {
       if (!line.startsWith("data: ")) continue;
       const d = JSON.parse(line.slice(6));
-      if (d.status === "running" || d.status === "done") {
+      if (d.status === "running") {
         document.getElementById("step-indicator").textContent = `🔄 ${d.step}/5 ${d.label}`;
       }
       if (d.status === "complete") {
         document.getElementById("step-indicator").textContent = "✅ 완료";
-        document.getElementById("result-body").textContent    = d.result;
-        document.getElementById("cost-info").textContent      =
+        document.getElementById("result-body").textContent = d.result;
+        document.getElementById("cost-info").textContent =
           `토큰 ${d.total_tokens?.toLocaleString()} · 비용 ₩${d.estimated_cost_krw?.toLocaleString()}`;
         const list = document.getElementById("ref-list");
         (d.verified_references || []).forEach(ref => {
@@ -213,21 +429,16 @@ async function sendToClaude() {
           li.style.color = ref.accessible ? "#155724" : "#721c24";
           list.appendChild(li);
         });
+        btn.textContent = "Claude 5단계 작성 시작 →";
+        btn.disabled = false;
       }
       if (d.status === "error") {
         document.getElementById("step-indicator").textContent = "❌ " + d.message;
+        btn.textContent = "Claude 5단계 작성 시작 →";
+        btn.disabled = false;
       }
     }
   }
-}
-
-function copyResponse() {
-  const text = document.getElementById("claude-response").textContent;
-  navigator.clipboard.writeText(text).then(() => {
-    alert("클립보드에 복사되었습니다!");
-  }).catch(() => {
-    alert("복사 실패");
-  });
 }
 </script>
 </body>

@@ -3,113 +3,258 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>수행평가 작업 시작</title>
+<title>내 수행평가 목록</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
-  .link-input-container {
-    max-width: 700px;
-    margin: 80px auto;
-    text-align: center;
-  }
-  .link-input-container h1 {
-    font-size: 2.5rem;
-    margin-bottom: 1rem;
-  }
-  .link-input-container p {
-    color: #666;
-    margin-bottom: 2rem;
-    font-size: 1.1rem;
-  }
-  .link-form {
+  .page-header {
     display: flex;
-    gap: 10px;
-    margin-bottom: 1rem;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2rem;
   }
-  .link-input {
-    flex: 1;
-    padding: 15px 20px;
-    font-size: 1rem;
-    border: 2px solid #ddd;
+  .page-header h1 { font-size: 1.8rem; margin: 0; }
+  .btn-refresh {
+    padding: 8px 18px;
+    font-size: 0.85rem;
+    border: 1px solid #ccc;
     border-radius: 8px;
-    transition: border-color 0.2s;
-  }
-  .link-input:focus {
-    outline: none;
-    border-color: #4CAF50;
-  }
-  .btn-submit {
-    padding: 15px 40px;
-    font-size: 1rem;
-    background: #4CAF50;
-    color: white;
-    border: none;
-    border-radius: 8px;
+    background: white;
     cursor: pointer;
-    font-weight: bold;
     transition: background 0.2s;
   }
-  .btn-submit:hover {
-    background: #45a049;
+  .btn-refresh:hover { background: #f5f5f5; }
+  .btn-refresh:disabled { opacity: 0.5; cursor: default; }
+
+  /* 로딩 */
+  .loading-state {
+    text-align: center;
+    padding: 80px 0;
+    color: #888;
   }
-  .example {
-    color: #999;
+  .spinner {
+    width: 40px; height: 40px;
+    border: 4px solid #eee;
+    border-top-color: #4CAF50;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 탭 */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #e5e5e5;
+  }
+  .tab-btn {
+    padding: 10px 20px;
     font-size: 0.9rem;
-    margin-top: 1rem;
+    font-weight: 600;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: #888;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.15s, border-color 0.15s;
   }
-  .error {
-    color: #f44336;
-    margin-top: 1rem;
-    display: none;
+  .tab-btn.active { color: #222; border-bottom-color: #222; }
+  .tab-btn .count {
+    display: inline-block;
+    background: #eee;
+    color: #555;
+    font-size: 0.75rem;
+    padding: 1px 7px;
+    border-radius: 10px;
+    margin-left: 6px;
+  }
+  .tab-btn.active .count { background: #222; color: white; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* 과업 카드 그리드 */
+  .task-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+  }
+  .task-card {
+    background: white;
+    border: 1px solid #e5e5e5;
+    border-radius: 12px;
+    padding: 20px;
+    cursor: pointer;
+    transition: box-shadow 0.2s, transform 0.1s;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+  .task-card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+  }
+  .card-subject {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #4CAF50;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  .card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    line-height: 1.4;
+    word-break: break-all;
+  }
+  .card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: #666;
+  }
+  .meta-tag {
+    background: #f5f5f5;
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+  .status-badge {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .status-badge.pending   { background: #fff3cd; color: #856404; }
+  .status-badge.in-progress { background: #cce5ff; color: #004085; }
+  .status-badge.done      { background: #d4edda; color: #155724; }
+
+  .empty-state {
+    text-align: center;
+    padding: 80px 0;
+    color: #aaa;
   }
 </style>
 </head>
 <body>
 <div class="container">
-  <div class="link-input-container">
-    <h1>📝 수행평가 작업 시작</h1>
-    <p>카카오톡에서 받은 Notion 링크를 붙여넣으세요</p>
 
-    <form class="link-form" onsubmit="handleSubmit(event)">
-      <input
-        type="text"
-        class="link-input"
-        id="notionLink"
-        placeholder="https://www.notion.so/..."
-        required
-      />
-      <button type="submit" class="btn-submit">시작 →</button>
-    </form>
-
-    <div class="example">
-      예시: https://www.notion.so/32946991dbbd81ed9f81dbed9ba2296d
-    </div>
-
-    <div class="error" id="errorMsg"></div>
+  <div class="page-header">
+    <h1>작업해야할 과제 목록</h1>
+    <button class="btn-refresh" id="refreshBtn" onclick="loadTasks(true)">새로고침</button>
   </div>
+
+  <div id="loading-state" class="loading-state">
+    <div class="spinner"></div>
+    <p>과업 목록을 불러오는 중입니다…<br><small>처음 로드 시 1~2분 소요될 수 있습니다.</small></p>
+  </div>
+
+  <div id="content" style="display:none">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('todo')" id="tab-todo">
+        작업해야할 과제 <span class="count" id="count-todo">0</span>
+      </button>
+      <button class="tab-btn" onclick="switchTab('done')" id="tab-done">
+        완료한 과제목록 <span class="count" id="count-done">0</span>
+      </button>
+    </div>
+    <div id="panel-todo" class="tab-panel active"></div>
+    <div id="panel-done" class="tab-panel"></div>
+  </div>
+
 </div>
 
 <script>
-function handleSubmit(e) {
-  e.preventDefault();
-  const input = document.getElementById('notionLink');
-  const errorMsg = document.getElementById('errorMsg');
-  const link = input.value.trim();
+let polling = null;
 
-  // Notion 링크에서 block_id 추출
-  const blockIdMatch = link.match(/([a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+function isDone(status) {
+  return status && (status.includes('완료') || status.toLowerCase().includes('done'));
+}
 
-  if (blockIdMatch) {
-    const blockId = blockIdMatch[1];
-    // 하이픈이 없으면 추가
-    const formattedId = blockId.includes('-') ? blockId :
-      blockId.slice(0,8) + '-' + blockId.slice(8,12) + '-' + blockId.slice(12,16) + '-' + blockId.slice(16,20) + '-' + blockId.slice(20);
+function statusClass(status) {
+  if (isDone(status)) return 'done';
+  if (status && (status.includes('진행') || status.includes('중'))) return 'in-progress';
+  return 'pending';
+}
 
-    window.location.href = '/task/' + formattedId;
-  } else {
-    errorMsg.textContent = '올바른 Notion 링크를 입력해주세요';
-    errorMsg.style.display = 'block';
+function cardHTML(t) {
+  return `
+    <a class="task-card" href="/task/${t.block_id}">
+      ${t.subject ? `<div class="card-subject">${t.subject}</div>` : ''}
+      <div class="card-title">${t.title || '(제목 없음)'}</div>
+      <div class="card-meta">
+        ${t.grade    ? `<span class="meta-tag">${t.grade}</span>`    : ''}
+        ${t.semester ? `<span class="meta-tag">${t.semester}</span>` : ''}
+        ${t.activity ? `<span class="meta-tag">${t.activity}</span>` : ''}
+        ${t.status   ? `<span class="status-badge ${statusClass(t.status)}">${t.status}</span>` : ''}
+      </div>
+    </a>`;
+}
+
+function renderTasks(tasks) {
+  const todo = tasks.filter(t => !isDone(t.status));
+  const done = tasks.filter(t =>  isDone(t.status));
+
+  document.getElementById('count-todo').textContent = todo.length;
+  document.getElementById('count-done').textContent = done.length;
+
+  const todoPanel = document.getElementById('panel-todo');
+  const donePanel = document.getElementById('panel-done');
+
+  todoPanel.innerHTML = todo.length
+    ? `<div class="task-grid">${todo.map(cardHTML).join('')}</div>`
+    : '<div class="empty-state"><p>작업 대기 중인 과제가 없습니다.</p></div>';
+
+  donePanel.innerHTML = done.length
+    ? `<div class="task-grid">${done.map(cardHTML).join('')}</div>`
+    : '<div class="empty-state"><p>완료된 과제가 없습니다.</p></div>';
+
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('content').style.display = 'block';
+}
+
+function switchTab(name) {
+  ['todo', 'done'].forEach(n => {
+    document.getElementById(`tab-${n}`).classList.toggle('active', n === name);
+    document.getElementById(`panel-${n}`).classList.toggle('active', n === name);
+  });
+}
+
+async function loadTasks(force = false) {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+
+  if (force) {
+    document.getElementById('content').style.display = 'none';
+    document.getElementById('loading-state').style.display = 'block';
+    document.querySelector('#loading-state p').innerHTML = '새로고침 중…';
+  }
+
+  try {
+    const url = '/api/my-tasks' + (force ? '?refresh=true' : '');
+    const res  = await fetch(url);
+    const data = await res.json();
+
+    if (data.status === 'ok') {
+      clearInterval(polling);
+      polling = null;
+      renderTasks(data.tasks);
+      btn.disabled = false;
+    } else {
+      if (!polling) {
+        polling = setInterval(() => loadTasks(false), 3000);
+      }
+    }
+  } catch (e) {
+    document.getElementById('loading-state').innerHTML =
+      `<p style="color:#f44336">오류: ${e.message}</p>`;
+    btn.disabled = false;
   }
 }
+
+loadTasks();
 </script>
 </body>
 </html>

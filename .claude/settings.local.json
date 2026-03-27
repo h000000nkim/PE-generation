@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:humdrum-sundae-1ce.notion.site)",
+      "Bash(python fetch_my_tasks.py)",
+      "Bash(uv --version)",
+      "Bash(uv python:*)",
+      "Bash(uv init:*)",
+      "Bash(uv add:*)",
+      "Bash(uv run python -c \":*)",
+      "Bash(uv run:*)",
+      "Bash(PYTHONUTF8=1 uv run python fetch_my_tasks.py)",
+      "Bash(PYTHONUTF8=1 uv run python -c \":*)",
+      "Bash(curl -s http://localhost:8000/api/my-tasks)",
+      "Bash(curl -s http://localhost:8000/task/32c46991-dbbd-8144-b536-cb934df60d0c)",
+      "Bash(tasklist)",
+      "Bash(netstat -ano)",
+      "Bash(PYTHONUTF8=1 uv run python -c \"import main; print\\([r.path for r in main.app.routes]\\)\")",
+      "Bash(powershell.exe -Command \"Get-NetTCPConnection -LocalPort 8000 | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id \\\\$_ -Force -ErrorAction SilentlyContinue; Write-Host \\\\\"Killed PID: \\\\$_\\\\\" }\" 2>&1)",
+      "Bash(powershell.exe -Command \"Get-NetTCPConnection -LocalPort 8000 | Select-Object LocalAddress,LocalPort,OwningProcess\" 2>&1)",
+      "Bash(powershell.exe -Command \"Stop-Process -Id 10456 -Force; Write-Host 'Done'\" 2>&1)",
+      "Bash(powershell.exe -Command \"Get-Process python | Select-Object Id, CPU, MainWindowTitle | Sort-Object CPU -Descending | Select-Object -First 10\" 2>&1)",
+      "Bash(curl -s http://localhost:8000/api/debug-task/32c46991-dbbd-8144-b536-cb934df60d0c)",
+      "Bash(curl -s http://localhost:8000/openapi.json)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(list\\(d[''''paths''''].keys\\(\\)\\)\\)\")",
+      "Bash(powershell.exe -Command \"Get-Process -Id 10456 -ErrorAction SilentlyContinue; Get-Process python | Where-Object {$_.Id -eq 10456}\" 2>&1)",
+      "Bash(powershell.exe -Command \"Get-Process -Id 10456 2>&1\" 2>&1)",
+      "Bash(jobs -l)",
+      "Bash(curl -s http://localhost:8001/api/debug-task/32c46991-dbbd-8144-b536-cb934df60d0c)",
+      "Bash(curl -s \"http://localhost:8002/api/debug-task/32c46991-dbbd-8144-b536-cb934df60d0c\")",
+      "Bash(python3 -c \":*)",
+      "Bash(PYTHONUTF8=1 curl -s \"http://localhost:8002/api/debug-task/32c46991-dbbd-8144-b536-cb934df60d0c\" 2>&1)",
+      "Bash(PYTHONUTF8=1 curl -s \"http://localhost:8003/api/debug-task/32c46991-dbbd-8144-b536-cb934df60d0c\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''bio_files:'''', d.get\\(''''bio_files''''\\)\\); print\\(''''school:'''', d.get\\(''''school''''\\)\\)\")",
+      "Bash(PYTHONUTF8=1 uv run python -c \"\nimport requests, json\nNOTION_BASE = 'https://www.notion.so/api/v3'\nHEADERS = {'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}\nnametag_id = '15bc6f95-7a0f-4f1e-9d0d-cd9ef08371b0'\nresp = requests.post\\(f'{NOTION_BASE}/loadPageChunk', json={'pageId': nametag_id, 'limit': 100, 'cursor': {'stack': []}, 'chunkNumber': 0, 'verticalColumns': False}, headers=HEADERS, timeout=15\\)\ndata = resp.json\\(\\)\nblocks = data.get\\('recordMap',{}\\).get\\('block',{}\\)\nfor bid, bval in blocks.items\\(\\):\n    b = bval.get\\('value', {}\\)\n    btype = b.get\\('type',''\\)\n    if btype in \\('collection_view', 'collection_view_page', 'linked_database'\\):\n        print\\('FOUND:', bid, btype, b.get\\('view_ids'\\)\\)\n        print\\('  collection_id:', b.get\\('collection_id'\\)\\)\n\" 2>&1)",
+      "Bash(PYTHONUTF8=1 uv run python -c \"\nimport requests, json\nNOTION_BASE = 'https://www.notion.so/api/v3'\nHEADERS = {'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}\nCOLLECTION_ID = 'd25a15be-d215-4ad0-ab35-618729fdd0b3'\nSPACE_ID = '02ad9178-8750-46bf-aa9e-e5d704cecb8a'\nDASHBOARD_VIEW_ID = '21146991-dbbd-808c-b149-000cb8eff257'\nnametag_id = '15bc6f95-7a0f-4f1e-9d0d-cd9ef08371b0'\n\nresp = requests.post\\(f'{NOTION_BASE}/queryCollection',\n    json={\n        'collection': {'id': COLLECTION_ID, 'spaceId': SPACE_ID},\n        'collectionView': {'id': DASHBOARD_VIEW_ID, 'spaceId': SPACE_ID},\n        'query': {\n            'filter': {\n                'operator': 'and',\n                'filters': [{\n                    'property': 'Qpmm',\n                    'filter': {'operator': 'relation_contains', 'value': {'type': 'exact', 'value': nametag_id}}\n                }]\n            }\n        },\n        'loader': {'type': 'reducer', 'reducers': {'collection_group_results': {'type': 'results', 'limit': 100}}, 'userTimeZone': 'Asia/Seoul'}\n    }, headers=HEADERS, timeout=15\\)\ndata = resp.json\\(\\)\nblock_ids = data.get\\('result',{}\\).get\\('reducerResults',{}\\).get\\('collection_group_results',{}\\).get\\('blockIds',[]\\)\nprint\\('tasks found:', len\\(block_ids\\)\\)\nprint\\('ids:', block_ids[:5]\\)\n\" 2>&1)",
+      "Bash(curl -s \"http://localhost:8004/api/debug-task/32c46991-dbbd-8144-b536-cb934df60d0c\")",
+      "Bash(PYTHONUTF8=1 curl -s \"http://localhost:8004/api/debug-task/32c46991-dbbd-8144-b536-cb934df60d0c\")"
+    ]
+  }
+}
