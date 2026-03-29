@@ -7,16 +7,20 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
 
 from modules.notion_parser  import parse_task_from_block, get_my_tasks
-from modules.image_analyzer import prepare_images
-from modules.claude_pipeline import run_pipeline
+from modules.workspace_launcher import (
+    create_workspace, build_instruction, launch_background,
+    get_result, save_result, get_workspace_path,
+    launch_pre_analysis, get_analysis, launch_revision, get_job_status,
+    get_locked_ids, set_locked_ids, get_memo_log, get_warning,
+    run_verification,
+)
 
-import anthropic
 import json
 import asyncio
 
@@ -51,7 +55,76 @@ async def api_my_tasks(refresh: bool = False):
     result = await asyncio.get_event_loop().run_in_executor(
         None, lambda: get_my_tasks(force=refresh)
     )
+    # 잠금 상태 + 분석 상태 추가 + detail 캐시 미리 워밍
+    if result.get("status") == "ok":
+        locked = get_locked_ids()
+        for t in result["tasks"]:
+            t["locked"] = t["block_id"] in locked
+            t["has_analysis"] = get_analysis(t["block_id"]) is not None
+            t["has_result"] = get_result(t["block_id"]) is not None
+            job = get_job_status(t["block_id"])
+            t["job_status"] = job["status"] if job else None
+            t["job_label"] = job["label"] if job else None
+            t["job_elapsed"] = job["elapsed_seconds"] if job else None
+        # detail 페이지 캐시 워밍 (백그라운드)
+        for t in result["tasks"]:
+            bid = t["block_id"]
+            if bid not in _task_cache or _time_mod.time() - _task_cache.get(bid, {}).get("ts", 0) > _TASK_CACHE_TTL:
+                asyncio.get_event_loop().run_in_executor(None, _warm_task_cache, bid)
     return JSONResponse(result)
+
+
+def _warm_task_cache(block_id: str):
+    """detail 페이지 캐시 미리 로드"""
+    try:
+        task = parse_task_from_block(block_id)
+        _task_cache[block_id] = {"task": task, "ts": _time_mod.time()}
+    except Exception:
+        pass
+
+
+@app.post("/api/lock-tasks")
+async def lock_tasks(request: Request):
+    """선택된 과제를 잠금 처리"""
+    data = await request.json()
+    ids = set(data.get("block_ids", []))
+    locked = get_locked_ids()
+    locked |= ids
+    set_locked_ids(locked)
+    return JSONResponse({"status": "ok", "locked_count": len(locked)})
+
+
+@app.post("/api/unlock-tasks")
+async def unlock_tasks(request: Request):
+    """선택된 과제를 잠금 해제"""
+    data = await request.json()
+    ids = set(data.get("block_ids", []))
+    locked = get_locked_ids()
+    locked -= ids
+    set_locked_ids(locked)
+    return JSONResponse({"status": "ok", "locked_count": len(locked)})
+
+
+@app.post("/api/batch-analysis")
+async def batch_analysis(request: Request):
+    """선택된 과제들 일괄 사전분석 (순차 실행, 이벤트루프 블로킹 방지)"""
+    data = await request.json()
+    block_ids = data.get("block_ids", [])
+
+    def _run_batch():
+        results = []
+        for bid in block_ids:
+            try:
+                task = parse_task_from_block(bid)
+                ws = create_workspace(task)
+                success = launch_pre_analysis(task, ws)
+                results.append({"block_id": bid, "success": success})
+            except Exception as e:
+                results.append({"block_id": bid, "success": False, "error": str(e)})
+        return results
+
+    results = await asyncio.get_event_loop().run_in_executor(None, _run_batch)
+    return JSONResponse({"status": "ok", "results": results})
 
 
 # ──────────────────────────────────────────────
@@ -63,280 +136,352 @@ async def debug_task(block_id: str):
     return JSONResponse({k: v for k, v in task.items() if not isinstance(v, list) or k in ("attachments","guide_files","bio_files")})
 
 
+# 과제 상세 캐시 (TTL 10분, 최대 20개)
+import time as _time_mod
+_task_cache: dict[str, dict] = {}
+_TASK_CACHE_TTL = 600
+_TASK_CACHE_MAX = 20
+
+
 @app.get("/task/{block_id}", response_class=HTMLResponse)
 async def task_detail(request: Request, block_id: str):
-    try:
-        task   = parse_task_from_block(block_id)
-        images = prepare_images(task.get("attachments", []))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    now = _time_mod.time()
+    cached = _task_cache.get(block_id)
 
-    image_meta = [
-        {
-            "name":   img["_meta"].get("name", ""),
-            "tokens": img["_meta"].get("estimated_tokens", 0),
-            "size":   "×".join(map(str, img["_meta"].get("size", [])))
-        }
-        for img in images
-    ]
+    if cached and now - cached["ts"] < _TASK_CACHE_TTL:
+        task = cached["task"]
+    else:
+        try:
+            task = await asyncio.get_event_loop().run_in_executor(
+                None, parse_task_from_block, block_id
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        _task_cache[block_id] = {"task": task, "ts": now}
+        # 캐시 크기 제한 — 가장 오래된 항목 제거
+        if len(_task_cache) > _TASK_CACHE_MAX:
+            oldest = min(_task_cache, key=lambda k: _task_cache[k]["ts"])
+            del _task_cache[oldest]
 
+    locked = block_id in get_locked_ids()
     return templates.TemplateResponse(
         request=request,
         name="detail.html",
-        context={"task": task, "image_meta": image_meta}
+        context={"task": task, "locked": locked}
     )
 
 
+
+# (레거시 API 제거됨: /api/build-prompt, /api/send-to-claude, /api/run-claude)
+# 모든 작업은 Claude Code 터미널 방식으로 실행됨
+
+
 # ──────────────────────────────────────────────
-# 3. 프롬프트 조립 API
+# 6. Claude Code 터미널 실행
 # ──────────────────────────────────────────────
-@app.post("/api/build-prompt")
-async def build_prompt(
-    block_id:  str = Form(...),
-    user_memo: str = Form(""),
-):
+# 이미 처리한 과제 ID 추적 (새 과제 감지용)
+_known_task_ids: set = set()
+
+@app.post("/api/launch-claude/{block_id}")
+async def launch_claude(block_id: str, user_memo: str = Form("")):
+    """워크스페이스 생성 후 Terminal에서 Claude Code 실행"""
+    _check_locked(block_id)
     try:
-        task   = parse_task_from_block(block_id)
-        images = prepare_images(task.get("attachments", []))
+        task = parse_task_from_block(block_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Notion 파싱 실패: {str(e)}")
+
+    workspace = await asyncio.get_event_loop().run_in_executor(
+        None, create_workspace, task
+    )
+    instruction = build_instruction(task, user_memo)
+    success = launch_background(workspace, instruction, block_id, "초안 작성")
+
+    _known_task_ids.add(block_id)
+
+    return JSONResponse({
+        "success": success,
+        "workspace": str(workspace),
+        "message": "백그라운드에서 작업이 시작되었습니다." if success else "실행 실패"
+    })
+
+
+@app.get("/api/check-new-tasks")
+async def check_new_tasks():
+    """새로운 과제가 있는지 확인 (이전에 없던 과제 감지) → 자동 사전분석"""
+    global _known_task_ids
+    result = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: get_my_tasks(force=False)
+    )
+
+    if result["status"] != "ok":
+        return JSONResponse({"new_tasks": [], "initialized": False})
+
+    current_ids = {t["block_id"] for t in result["tasks"]}
+
+    # 첫 로드 시 초기화만 수행
+    if not _known_task_ids:
+        _known_task_ids = current_ids.copy()
+        return JSONResponse({"new_tasks": [], "initialized": True})
+
+    new_ids = current_ids - _known_task_ids
+    new_tasks = [t for t in result["tasks"] if t["block_id"] in new_ids]
+
+    # 새 과제 감지 시 백그라운드로 워크스페이스 생성 (사전분석은 수동)
+    for nt in new_tasks:
+        asyncio.get_event_loop().run_in_executor(
+            None, _auto_prepare_task, nt["block_id"]
+        )
+
+    # 감지한 새 과제를 known에 추가
+    _known_task_ids = current_ids.copy()
+
+    return JSONResponse({
+        "new_tasks": new_tasks,
+        "initialized": True
+    })
+
+
+def _auto_prepare_task(block_id: str):
+    """새 과제 자동 준비: 파싱 → 워크스페이스 생성 (파일 다운로드 + 텍스트 추출)"""
+    try:
+        task = parse_task_from_block(block_id)
+        ws = create_workspace(task)
+        print(f"[auto-prepare] {task.get('title', block_id)} 워크스페이스 생성 완료: {ws}")
+    except Exception as e:
+        print(f"[auto-prepare] {block_id} 실패: {e}")
+
+
+# ──────────────────────────────────────────────
+# 7. 사전분석 조회 / 수동 실행
+# ──────────────────────────────────────────────
+@app.get("/api/analysis/{block_id}")
+async def api_get_analysis(block_id: str):
+    """캐싱된 사전분석 결과 조회"""
+    analysis = get_analysis(block_id)
+    if not analysis:
+        return JSONResponse({"status": "not_found"}, status_code=404)
+    return JSONResponse(analysis)
+
+
+def _check_locked(block_id: str):
+    """잠금된 과제면 403 에러"""
+    if block_id in get_locked_ids():
+        raise HTTPException(status_code=403, detail="잠금된 과제는 수정할 수 없습니다")
+
+
+@app.post("/api/analysis/{block_id}")
+async def api_run_analysis(block_id: str):
+    """Claude Code 터미널로 사전분석 실행 (워크스페이스 생성 + STEP 2-4)"""
+    _check_locked(block_id)
+    try:
+        task = await asyncio.get_event_loop().run_in_executor(
+            None, parse_task_from_block, block_id
+        )
+        ws = await asyncio.get_event_loop().run_in_executor(
+            None, create_workspace, task
+        )
+        success = launch_pre_analysis(task, ws)
+        return JSONResponse({
+            "success": success,
+            "workspace": str(ws),
+            "message": "Terminal에서 사전분석이 시작되었습니다." if success else "Terminal 실행 실패"
+        })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    user_text = f"""[과제 정보]
-과목: {task['subject']}
-학년/학기: {task['grade']} {task['semester']}
-활동유형: {task['activity']}
-제출방식: {task['submit_type']}
-진행상태: {task['status']}
 
-[요청사항 / 선생님 안내]
-{task['request_msg'] or '없음'}
-
-[작성자 추가 아이디어]
-{user_memo or '없음'}
-
-위 지침과 첨부 이미지의 평가기준을 참고하여 작성해 주세요."""
-
-    image_tokens = sum(img["_meta"]["estimated_tokens"] for img in images)
-    text_tokens  = len(user_text) // 2
-
-    return JSONResponse({
-        "system":                  "당신은 수행평가 작문 전문가입니다. 유저 메시지에 포함된 [요청사항]과 첨부 이미지의 평가기준을 최우선으로 따르세요. 출처는 실제 접속 가능한 URL로 검증 후 사용하고, AI 특유의 문체를 피해 자연스러운 문어체로 작성하세요.",
-        "user_text":               user_text,
-        "image_count":             len(images),
-        "estimated_input_tokens":  image_tokens + text_tokens,
-        "estimated_cost_krw":      round((image_tokens + text_tokens) * 3 / 1_000_000 * 1380),
-    })
+# ──────────────────────────────────────────────
+# 7-0. 작업 상태 폴링
+# ──────────────────────────────────────────────
+@app.get("/api/job-status/{block_id}")
+async def api_job_status(block_id: str):
+    """백그라운드 작업 상태 조회"""
+    status = get_job_status(block_id)
+    if not status:
+        return JSONResponse({"status": "idle"})
+    return JSONResponse(status)
 
 
 # ──────────────────────────────────────────────
-# 4. Claude API 전송
+# 7-1. 산출물 수정
 # ──────────────────────────────────────────────
-@app.post("/api/send-to-claude")
-async def send_to_claude(
-    block_id:  str = Form(...),
-    user_memo: str = Form(""),
-):
-    """Claude API에 과업 + 이미지 전송하고 응답 받기"""
-    if not ANTHROPIC_API_KEY or ANTHROPIC_API_KEY == "sk-ant-여기에_실제_키_입력":
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY가 설정되지 않았습니다. .env 파일을 확인하세요.")
-
+@app.post("/api/revise/{block_id}")
+async def revise_output(block_id: str, revision_memo: str = Form(...)):
+    """기존 산출물 수정 — Claude Code 터미널 실행"""
+    _check_locked(block_id)
     try:
-        task   = parse_task_from_block(block_id)
-        images = prepare_images(task.get("attachments", []))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Notion 데이터 파싱 실패: {str(e)}")
-
-    # System prompt
-    system_prompt = "당신은 수행평가 작문 전문가입니다. 유저 메시지에 포함된 [요청사항]과 첨부 이미지의 평가기준을 최우선으로 따르세요. 출처는 실제 접속 가능한 URL로 검증 후 사용하고, AI 특유의 문체를 피해 자연스러운 문어체로 작성하세요."
-
-    # User message (텍스트 + 이미지)
-    user_content = []
-
-    # 텍스트 부분
-    user_text = f"""[과제 정보]
-과목: {task['subject']}
-학년/학기: {task['grade']} {task['semester']}
-활동유형: {task['activity']}
-제출방식: {task['submit_type']}
-진행상태: {task['status']}
-
-[요청사항 / 선생님 안내]
-{task['request_msg'] or '없음'}
-
-[작성자 추가 아이디어]
-{user_memo or '없음'}
-
-위 지침과 첨부 이미지의 평가기준을 참고하여 작성해 주세요."""
-
-    user_content.append({
-        "type": "text",
-        "text": user_text
-    })
-
-    # 이미지 추가
-    for img in images:
-        user_content.append({
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": img["source"]["media_type"],
-                "data": img["source"]["data"]
-            }
-        })
-
-    # Claude API 호출
-    try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4096,
-            system=system_prompt,
-            messages=[
-                {
-                    "role": "user",
-                    "content": user_content
-                }
-            ]
+        task = await asyncio.get_event_loop().run_in_executor(
+            None, parse_task_from_block, block_id
         )
-
-        response_text = message.content[0].text if message.content else ""
-
+        success = launch_revision(task, revision_memo)
         return JSONResponse({
-            "success": True,
-            "response": response_text,
-            "usage": {
-                "input_tokens": message.usage.input_tokens,
-                "output_tokens": message.usage.output_tokens
-            }
+            "success": success,
+            "message": "Terminal에서 수정이 시작되었습니다." if success else "Terminal 실행 실패"
         })
-
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Claude API 호출 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# ──────────────────────────────────────────────
-# 5. Claude 5단계 파이프라인 (SSE 스트리밍)
-# ──────────────────────────────────────────────
-@app.post("/api/run-claude")
-async def run_claude_pipeline(
-    block_id:  str = Form(...),
-    user_memo: str = Form(""),
-    test_mode: str = Form("false"),  # 테스트 모드 플래그
-):
-    """5단계 Claude 파이프라인 실행 + 진행상황 SSE 스트리밍"""
+@app.get("/api/warning/{block_id}")
+async def api_warning(block_id: str):
+    """미해결 경고 조회"""
+    w = get_warning(block_id)
+    if not w:
+        return JSONResponse({"status": "ok"})
+    return JSONResponse({"status": "warning", **w})
 
-    try:
-        task   = parse_task_from_block(block_id)
-        images = prepare_images(task.get("attachments", []))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Notion 데이터 파싱 실패: {str(e)}")
 
-    async def event_generator():
-        """SSE 이벤트 생성기"""
+@app.get("/api/memo-log/{block_id}")
+async def api_memo_log(block_id: str):
+    """추가 지시사항 이력 조회"""
+    logs = get_memo_log(block_id)
+    return JSONResponse(logs)
 
-        # 테스트 모드
-        if test_mode == "true":
-            steps = [
-                (1, "과업 분석 + 개요 + 분량 파악"),
-                (2, "출처 탐색 (웹 검색)"),
-                (3, "초안 작성 (1600자+)"),
-                (4, "문체 조정 (AI 표현 제거)"),
-                (5, "최종본 + 참고자료"),
-            ]
 
-            for step, label in steps:
-                await asyncio.sleep(1.5)
-                yield f"data: {json.dumps({'status': 'running', 'step': step, 'label': label})}\n\n"
+@app.delete("/api/memo-log/{block_id}")
+async def api_delete_memo_log(block_id: str):
+    """지시사항 이력 전체 삭제"""
+    _check_locked(block_id)
+    ws = get_workspace_path(block_id)
+    if ws:
+        log_file = ws / "memo_log.json"
+        if log_file.exists():
+            log_file.unlink()
+    return JSONResponse({"status": "ok"})
 
-            # 목업 결과
-            mock_result = f"""제목: {task['subject']} 수행평가 - {task['title']}
 
-[서론]
-{task['request_msg'][:100] if task.get('request_msg') else '과제 안내 내용'}에 따라 본 과제를 수행하였다.
+@app.delete("/api/memo-log/{block_id}/{index}")
+async def api_delete_memo_entry(block_id: str, index: int):
+    """지시사항 이력 개별 삭제"""
+    _check_locked(block_id)
+    ws = get_workspace_path(block_id)
+    if not ws:
+        return JSONResponse({"status": "error"}, status_code=404)
+    log_file = ws / "memo_log.json"
+    if not log_file.exists():
+        return JSONResponse({"status": "error"}, status_code=404)
+    logs = json.loads(log_file.read_text(encoding="utf-8"))
+    if 0 <= index < len(logs):
+        logs.pop(index)
+        log_file.write_text(json.dumps(logs, ensure_ascii=False, indent=2), encoding="utf-8")
+    return JSONResponse({"status": "ok"})
 
-[본론]
-현대 사회에서는 다양한 이슈들이 존재한다. 첫째, 의료 접근성 문제가 있다. 독거노인과 도서산간 지역 주민들은 적절한 의료 서비스를 받기 어려운 실정이다.
 
-둘째, 사회적 양극화 현상이 심화되고 있다. 통계청 자료에 따르면 소득 격차가 지속적으로 확대되고 있다.
+@app.delete("/api/result/{block_id}")
+async def api_delete_result(block_id: str):
+    _check_locked(block_id)
+    """워크스페이스의 산출물 삭제 (result.json + 산출물 파일)"""
+    ws = get_workspace_path(block_id)
+    if not ws:
+        return JSONResponse({"status": "error", "message": "워크스페이스 없음"}, status_code=404)
 
-셋째, 환경 문제 해결을 위한 노력이 필요하다. 기후변화에 대응하기 위해 정부와 시민사회가 협력하고 있다.
-
-[결론]
-이러한 문제들을 해결하기 위해서는 제도적 개선과 시민의식 향상이 필요하다.
-
-(테스트 모드로 생성된 목업 결과입니다. 실제 API 호출 시 더 상세한 내용이 작성됩니다.)"""
-
-            mock_refs = [
-                {
-                    "title": "통계청 - 2024년 소득분배지표",
-                    "cleaned_url": "https://kostat.go.kr/example",
-                    "accessible": True,
-                    "suspicious_ai": []
-                },
-                {
-                    "title": "보건복지부 - 의료 접근성 개선 방안",
-                    "cleaned_url": "https://mohw.go.kr/example",
-                    "accessible": True,
-                    "suspicious_ai": []
-                },
-                {
-                    "title": "환경부 - 기후변화 대응 정책",
-                    "cleaned_url": "https://me.go.kr/example?utm_source=chatgpt",
-                    "accessible": False,
-                    "suspicious_ai": ["utm_source"]
-                }
-            ]
-
-            yield f"data: {json.dumps({
-                'status': 'complete',
-                'result': mock_result,
-                'verified_references': mock_refs,
-                'total_tokens': 25000,
-                'estimated_cost_krw': 937
-            })}\n\n"
-            return
-
-        # 실제 모드
-        if not ANTHROPIC_API_KEY or ANTHROPIC_API_KEY == "sk-ant-여기에_실제_키_입력":
-            yield f"data: {json.dumps({'status': 'error', 'message': 'ANTHROPIC_API_KEY가 설정되지 않았습니다.'})}\n\n"
-            return
-
-        progress_events = []
-
-        def progress_callback(step, label, status):
-            """진행상황 수집"""
-            progress_events.append({
-                "status": status,
-                "step": step,
-                "label": label
-            })
-
+    # result.json 읽어서 파일 목록 확인
+    result_file = ws / "result.json"
+    if result_file.exists():
         try:
-            # 별도 스레드에서 파이프라인 실행
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                run_pipeline,
-                task,
-                images,
-                user_memo,
-                progress_callback
+            data = json.loads(result_file.read_text(encoding="utf-8"))
+            for o in data.get("outputs", []):
+                f = ws / o.get("file", "")
+                if f.exists() and f.is_file():
+                    f.unlink()
+        except Exception:
+            pass
+        result_file.unlink()
+
+    # result.md도 삭제
+    md_file = ws / "result.md"
+    if md_file.exists():
+        md_file.unlink()
+
+    return JSONResponse({"status": "ok"})
+
+
+# ──────────────────────────────────────────────
+# 7-2. 결과 조회 / 저장
+# ──────────────────────────────────────────────
+@app.get("/api/result/{block_id}")
+async def api_get_result(block_id: str):
+    """워크스페이스에서 result.json 읽기"""
+    result = await asyncio.get_event_loop().run_in_executor(
+        None, get_result, block_id
+    )
+    if result is None:
+        return JSONResponse({"status": "not_found"}, status_code=404)
+    return JSONResponse({"status": "ok", "result": result})
+
+
+@app.post("/api/result/{block_id}")
+async def api_save_result(block_id: str, request: Request):
+    """워크스페이스에 result.json 저장/업데이트"""
+    data = await request.json()
+    success = await asyncio.get_event_loop().run_in_executor(
+        None, save_result, block_id, data
+    )
+    if not success:
+        return JSONResponse({"status": "error", "message": "워크스페이스를 찾을 수 없습니다"}, status_code=404)
+    return JSONResponse({"status": "ok"})
+
+
+@app.get("/api/download/{block_id}/{filename}")
+async def download_file(block_id: str, filename: str):
+    """워크스페이스 파일 다운로드 (docx 등)"""
+    ws = get_workspace_path(block_id)
+    if not ws:
+        raise HTTPException(status_code=404, detail="워크스페이스를 찾을 수 없습니다")
+    file_path = ws / filename
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다")
+    return FileResponse(file_path, filename=filename)
+
+
+@app.get("/api/proxy-file")
+async def proxy_file(url: str):
+    """외부 URL을 프록시하여 CORS 우회"""
+    import httpx
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            ct = resp.headers.get("content-type", "application/octet-stream")
+            return StreamingResponse(
+                iter([resp.content]),
+                media_type=ct,
+                headers={"Content-Disposition": "inline"}
             )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
-            # 완료 이벤트 전송
-            yield f"data: {json.dumps({
-                'status': 'complete',
-                'result': result['result'],
-                'verified_references': result['verified_references'],
-                'total_tokens': result['total_tokens'],
-                'estimated_cost_krw': result['estimated_cost_krw']
-            })}\n\n"
 
-        except Exception as e:
-            yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
+# ──────────────────────────────────────────────
+# 8. 산출물 검증 API
+# ──────────────────────────────────────────────
+@app.post("/api/verify/{block_id}")
+async def api_verify(block_id: str):
+    """산출물 검증 실행 — Claude Code 백그라운드로 검증 수행"""
+    try:
+        task = await asyncio.get_event_loop().run_in_executor(
+            None, parse_task_from_block, block_id
+        )
+        success = run_verification(task)
+        return JSONResponse({
+            "success": success,
+            "message": "검증이 시작되었습니다." if success else "검증 실행 실패"
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.get("/api/verify/{block_id}")
+async def api_get_verification(block_id: str):
+    """검증 결과 조회"""
+    ws = get_workspace_path(block_id)
+    if not ws:
+        return JSONResponse({"status": "not_found"}, status_code=404)
+    verify_file = ws / "verification.json"
+    if verify_file.exists():
+        return JSONResponse(json.loads(verify_file.read_text(encoding="utf-8")))
+    return JSONResponse({"status": "not_found"}, status_code=404)
 
 
 # ──────────────────────────────────────────────

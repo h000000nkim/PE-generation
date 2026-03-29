@@ -2,6 +2,7 @@
 Notion 비공식 API 파서 (비동기 병렬 버전)
 """
 
+import os
 import asyncio
 import time
 import requests
@@ -22,9 +23,21 @@ DASHBOARD_VIEW_ID = "21146991-dbbd-808c-b149-000cb8eff257"
 MY_USER_ID        = "0705e077-d8dc-4ff5-b0ef-5e45c4e65477"   # 훈 김
 MENTOR_PROP_KEY   = "~~_I"
 
-# 내 과업 캐시 (TTL: 30분)
+# 내 과업 캐시 (TTL: 30분) + 디스크 영속화
+import json as _json
+_CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "workspaces", ".tasks_cache.json")
 _my_tasks_cache: dict = {"tasks": None, "ts": 0.0, "loading": False}
 MY_TASKS_TTL = 1800
+
+# 서버 시작 시 디스크 캐시 로드
+try:
+    if os.path.exists(_CACHE_FILE):
+        with open(_CACHE_FILE, "r", encoding="utf-8") as f:
+            _disk = _json.load(f)
+        _my_tasks_cache["tasks"] = _disk.get("tasks")
+        _my_tasks_cache["ts"] = _disk.get("ts", 0.0)
+except Exception:
+    pass
 
 
 def _get_text(props: dict, key: str) -> str:
@@ -81,7 +94,7 @@ _NT_SCHEMA: dict[str, str] = {
     "ualG":  "학교",
     "Zkps":  "학생코드",
     "`zyo":  "등록여부",
-    "ntTg":  "생기부 방향",
+    "ntTg":  "탐구 주제 이력",
     "HR~K":  "시험범위 / 수업내용",
     "BBel":  "전화번호",
     "{`IL":  "전화번호2",
@@ -483,6 +496,10 @@ def get_my_tasks(force: bool = False) -> dict:
             tasks = _fetch_my_tasks_blocking()
             _my_tasks_cache["tasks"] = tasks
             _my_tasks_cache["ts"]    = time.time()
+            # 디스크에 저장
+            os.makedirs(os.path.dirname(_CACHE_FILE), exist_ok=True)
+            with open(_CACHE_FILE, "w", encoding="utf-8") as f:
+                _json.dump({"tasks": tasks, "ts": _my_tasks_cache["ts"]}, f, ensure_ascii=False)
         except Exception:
             pass
         finally:

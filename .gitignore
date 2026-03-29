@@ -28,6 +28,7 @@ Thumbs.db
 
 # Generated output
 my_tasks.json
+workspaces/
 
 # Test files
 check_*.py

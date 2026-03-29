@@ -7,142 +7,97 @@
 <link rel="stylesheet" href="/static/style.css">
 <style>
   .page-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 2rem;
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;
   }
   .page-header h1 { font-size: 1.8rem; margin: 0; }
   .btn-refresh {
-    padding: 8px 18px;
-    font-size: 0.85rem;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    background: white;
-    cursor: pointer;
-    transition: background 0.2s;
+    padding: 8px 18px; font-size: 0.85rem; border: 1px solid #ccc;
+    border-radius: 8px; background: white; cursor: pointer; transition: background 0.2s;
   }
   .btn-refresh:hover { background: #f5f5f5; }
   .btn-refresh:disabled { opacity: 0.5; cursor: default; }
 
-  /* 로딩 */
-  .loading-state {
-    text-align: center;
-    padding: 80px 0;
-    color: #888;
-  }
+  .loading-state { text-align: center; padding: 80px 0; color: #888; }
   .spinner {
-    width: 40px; height: 40px;
-    border: 4px solid #eee;
-    border-top-color: #4CAF50;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin: 0 auto 16px;
+    width: 40px; height: 40px; border: 4px solid #eee; border-top-color: #4CAF50;
+    border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* 탭 */
-  .tabs {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 1.5rem;
-    border-bottom: 2px solid #e5e5e5;
-  }
+  .tabs { display: flex; gap: 4px; margin-bottom: 1rem; border-bottom: 2px solid #e5e5e5; }
   .tab-btn {
-    padding: 10px 20px;
-    font-size: 0.9rem;
-    font-weight: 600;
-    border: none;
-    background: none;
-    cursor: pointer;
-    color: #888;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -2px;
-    transition: color 0.15s, border-color 0.15s;
+    padding: 10px 20px; font-size: 0.9rem; font-weight: 600; border: none;
+    background: none; cursor: pointer; color: #888; border-bottom: 2px solid transparent;
+    margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
   }
   .tab-btn.active { color: #222; border-bottom-color: #222; }
   .tab-btn .count {
-    display: inline-block;
-    background: #eee;
-    color: #555;
-    font-size: 0.75rem;
-    padding: 1px 7px;
-    border-radius: 10px;
-    margin-left: 6px;
+    display: inline-block; background: #eee; color: #555; font-size: 0.75rem;
+    padding: 1px 7px; border-radius: 10px; margin-left: 6px;
   }
   .tab-btn.active .count { background: #222; color: white; }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
 
-  /* 과업 카드 그리드 */
+  /* 액션 바 */
+  .action-bar {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem;
+    padding: 10px 14px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e5e5;
+    align-items: center;
+  }
+  .action-bar .btn {
+    padding: 6px 14px; font-size: 0.8rem; font-weight: 600; border: none;
+    border-radius: 6px; cursor: pointer; transition: opacity 0.2s; color: white;
+  }
+  .action-bar .btn:disabled { opacity: 0.4; cursor: default; }
+  .action-bar .btn.analyze { background: #f97316; }
+  .action-bar .btn.lock { background: #6b7280; }
+  .action-bar .btn.unlock { background: #3b82f6; }
+  .action-bar .select-info { font-size: 0.8rem; color: #888; margin-left: auto; }
+
+  /* 카드 */
   .task-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 16px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;
   }
   .task-card {
-    background: white;
-    border: 1px solid #e5e5e5;
-    border-radius: 12px;
-    padding: 20px;
-    cursor: pointer;
-    transition: box-shadow 0.2s, transform 0.1s;
-    text-decoration: none;
-    color: inherit;
-    display: block;
+    background: white; border: 1px solid #e5e5e5; border-radius: 12px; padding: 20px;
+    transition: box-shadow 0.2s, transform 0.1s; display: flex; flex-direction: column; gap: 8px;
   }
-  .task-card:hover {
-    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-    transform: translateY(-2px);
-  }
+  .task-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); transform: translateY(-2px); }
+  .task-card.selected { border-color: #3b82f6; background: #eff6ff; }
+  .task-card.locked-card { opacity: 0.6; }
+
+  .card-top { display: flex; align-items: center; gap: 10px; }
+  .card-check { width: 18px; height: 18px; cursor: pointer; accent-color: #3b82f6; flex-shrink: 0; }
+  .card-link { text-decoration: none; color: inherit; flex: 1; }
   .card-subject {
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: #4CAF50;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 6px;
+    font-size: 0.78rem; font-weight: 600; color: #4CAF50;
+    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;
   }
-  .card-title {
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 12px;
-    line-height: 1.4;
-    word-break: break-all;
-  }
-  .card-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    font-size: 0.78rem;
-    color: #666;
-  }
-  .meta-tag {
-    background: #f5f5f5;
-    padding: 3px 8px;
-    border-radius: 4px;
-  }
-  .status-badge {
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-weight: 600;
-  }
+  .card-title { font-size: 1rem; font-weight: 600; line-height: 1.4; word-break: break-all; }
+  .card-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 0.78rem; color: #666; }
+  .meta-tag { background: #f5f5f5; padding: 3px 8px; border-radius: 4px; }
+  .status-badge { padding: 3px 8px; border-radius: 4px; font-weight: 600; }
   .status-badge.pending   { background: #fff3cd; color: #856404; }
   .status-badge.in-progress { background: #cce5ff; color: #004085; }
   .status-badge.done      { background: #d4edda; color: #155724; }
 
-  .empty-state {
-    text-align: center;
-    padding: 80px 0;
-    color: #aaa;
+  .analysis-badge {
+    font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; font-weight: 600;
   }
+  .analysis-badge.cached { background: #dbeafe; color: #1d4ed8; }
+  .analysis-badge.running { background: #fef3c7; color: #92400e; }
+  .analysis-badge.none { background: #f3f4f6; color: #9ca3af; }
+
+  .empty-state { text-align: center; padding: 80px 0; color: #aaa; }
 </style>
 </head>
 <body>
 <div class="container">
 
   <div class="page-header">
-    <h1>작업해야할 과제 목록</h1>
+    <h1>수행평가 대시보드</h1>
     <button class="btn-refresh" id="refreshBtn" onclick="loadTasks(true)">새로고침</button>
   </div>
 
@@ -152,109 +107,256 @@
   </div>
 
   <div id="content" style="display:none">
+
+    <div class="action-bar" id="action-bar">
+      <button class="btn analyze" onclick="batchAnalysis()" id="batchAnalyzeBtn" disabled>사전분석</button>
+      <button class="btn lock" onclick="moveToLock()" id="lockBtn" disabled>잠금으로 이동</button>
+      <button class="btn unlock" onclick="moveToUnlock()" id="unlockBtn" disabled>완료로 이동</button>
+      <span class="select-info" id="selectInfo">항목을 선택하세요</span>
+    </div>
+
     <div class="tabs">
       <button class="tab-btn active" onclick="switchTab('todo')" id="tab-todo">
-        작업해야할 과제 <span class="count" id="count-todo">0</span>
+        진행중 <span class="count" id="count-todo">0</span>
       </button>
       <button class="tab-btn" onclick="switchTab('done')" id="tab-done">
-        완료한 과제목록 <span class="count" id="count-done">0</span>
+        완료 <span class="count" id="count-done">0</span>
+      </button>
+      <button class="tab-btn" onclick="switchTab('locked')" id="tab-locked">
+        잠금 <span class="count" id="count-locked">0</span>
       </button>
     </div>
     <div id="panel-todo" class="tab-panel active"></div>
     <div id="panel-done" class="tab-panel"></div>
+    <div id="panel-locked" class="tab-panel"></div>
   </div>
 
 </div>
 
 <script>
+let allTasks = [];
+let selectedIds = new Set();
 let polling = null;
+let currentTab = 'todo';
 
 function isDone(status) {
   return status && (status.includes('완료') || status.toLowerCase().includes('done'));
 }
-
 function statusClass(status) {
   if (isDone(status)) return 'done';
   if (status && (status.includes('진행') || status.includes('중'))) return 'in-progress';
   return 'pending';
 }
 
+function formatElapsed(sec) {
+  if (!sec) return '';
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m > 0 ? `${m}분 ${s}초` : `${s}초`;
+}
+
+function progressBadges(t) {
+  let html = '';
+  const isRunning = t.job_status === 'running';
+  const runLabel = (t.job_label || '').trim();
+
+  // 실행 중 — 작업명 + 경과시간
+  if (isRunning) {
+    html += `<span class="analysis-badge running">${runLabel || '작업'}중 ${formatElapsed(t.job_elapsed)}</span>`;
+  }
+  // 분석 상태 — 현재 사전분석 중이면 표시 안 함
+  if (t.has_analysis && !(isRunning && runLabel === '사전분석')) {
+    html += '<span class="analysis-badge cached">분석완료</span>';
+  } else if (!isRunning && !t.has_analysis) {
+    html += '<span class="analysis-badge none">미분석</span>';
+  }
+  // 초안 상태 — 현재 초안 작성/수정 중이면 표시 안 함
+  if (t.has_result && !(isRunning && (runLabel === '초안 작성' || runLabel === '수정'))) {
+    html += '<span class="analysis-badge" style="background:#d1fae5;color:#065f46">초안완료</span>';
+  }
+  return html;
+}
+
 function cardHTML(t) {
+  const checked = selectedIds.has(t.block_id) ? 'checked' : '';
+  const selClass = selectedIds.has(t.block_id) ? 'selected' : '';
+  const lockClass = t.locked ? 'locked-card' : '';
   return `
-    <a class="task-card" href="/task/${t.block_id}">
-      ${t.subject ? `<div class="card-subject">${t.subject}</div>` : ''}
-      <div class="card-title">${t.title || '(제목 없음)'}</div>
+    <div class="task-card ${selClass} ${lockClass}" id="card-${t.block_id}">
+      <div class="card-top">
+        <input type="checkbox" class="card-check" ${checked}
+               onchange="toggleSelect('${t.block_id}', this.checked)" />
+        <a class="card-link" href="/task/${t.block_id}">
+          ${t.subject ? `<div class="card-subject">${t.subject}</div>` : ''}
+          <div class="card-title">${t.title || '(제목 없음)'}</div>
+        </a>
+      </div>
       <div class="card-meta">
         ${t.grade    ? `<span class="meta-tag">${t.grade}</span>`    : ''}
         ${t.semester ? `<span class="meta-tag">${t.semester}</span>` : ''}
         ${t.activity ? `<span class="meta-tag">${t.activity}</span>` : ''}
         ${t.status   ? `<span class="status-badge ${statusClass(t.status)}">${t.status}</span>` : ''}
+        ${progressBadges(t)}
       </div>
-    </a>`;
+    </div>`;
+}
+
+function toggleSelect(bid, checked) {
+  if (checked) selectedIds.add(bid); else selectedIds.delete(bid);
+  const card = document.getElementById(`card-${bid}`);
+  if (card) card.classList.toggle('selected', checked);
+  updateActionBar();
+}
+
+function updateActionBar() {
+  const n = selectedIds.size;
+  const info = document.getElementById('selectInfo');
+  info.textContent = n > 0 ? `${n}개 선택됨` : '항목을 선택하세요';
+  info.style.color = '#888';
+
+  document.getElementById('batchAnalyzeBtn').disabled = n === 0;
+  // 잠금 탭에서는 "잠금으로 이동" 비활성, 반대도 마찬가지
+  document.getElementById('lockBtn').disabled = n === 0 || currentTab === 'locked';
+  document.getElementById('unlockBtn').disabled = n === 0 || currentTab !== 'locked';
 }
 
 function renderTasks(tasks) {
-  const todo = tasks.filter(t => !isDone(t.status));
-  const done = tasks.filter(t =>  isDone(t.status));
+  allTasks = tasks;
+  const todo = tasks.filter(t => !isDone(t.status) && !t.locked);
+  const done = tasks.filter(t => isDone(t.status) && !t.locked);
+  const locked = tasks.filter(t => t.locked);
 
   document.getElementById('count-todo').textContent = todo.length;
   document.getElementById('count-done').textContent = done.length;
+  document.getElementById('count-locked').textContent = locked.length;
 
-  const todoPanel = document.getElementById('panel-todo');
-  const donePanel = document.getElementById('panel-done');
-
-  todoPanel.innerHTML = todo.length
+  document.getElementById('panel-todo').innerHTML = todo.length
     ? `<div class="task-grid">${todo.map(cardHTML).join('')}</div>`
-    : '<div class="empty-state"><p>작업 대기 중인 과제가 없습니다.</p></div>';
+    : '<div class="empty-state"><p>진행중인 과제가 없습니다.</p></div>';
 
-  donePanel.innerHTML = done.length
+  document.getElementById('panel-done').innerHTML = done.length
     ? `<div class="task-grid">${done.map(cardHTML).join('')}</div>`
     : '<div class="empty-state"><p>완료된 과제가 없습니다.</p></div>';
 
+  document.getElementById('panel-locked').innerHTML = locked.length
+    ? `<div class="task-grid">${locked.map(cardHTML).join('')}</div>`
+    : '<div class="empty-state"><p>잠금된 과제가 없습니다.</p></div>';
+
   document.getElementById('loading-state').style.display = 'none';
   document.getElementById('content').style.display = 'block';
+  if (typeof startDashPolling === 'function') startDashPolling();
 }
 
 function switchTab(name) {
-  ['todo', 'done'].forEach(n => {
+  currentTab = name;
+  selectedIds.clear();
+  ['todo', 'done', 'locked'].forEach(n => {
     document.getElementById(`tab-${n}`).classList.toggle('active', n === name);
     document.getElementById(`panel-${n}`).classList.toggle('active', n === name);
   });
+  updateActionBar();
 }
 
 async function loadTasks(force = false) {
   const btn = document.getElementById('refreshBtn');
   btn.disabled = true;
-
   if (force) {
     document.getElementById('content').style.display = 'none';
     document.getElementById('loading-state').style.display = 'block';
     document.querySelector('#loading-state p').innerHTML = '새로고침 중…';
   }
-
   try {
     const url = '/api/my-tasks' + (force ? '?refresh=true' : '');
-    const res  = await fetch(url);
+    const res = await fetch(url);
     const data = await res.json();
-
     if (data.status === 'ok') {
-      clearInterval(polling);
-      polling = null;
+      clearInterval(polling); polling = null;
       renderTasks(data.tasks);
       btn.disabled = false;
     } else {
-      if (!polling) {
-        polling = setInterval(() => loadTasks(false), 3000);
-      }
+      if (!polling) polling = setInterval(() => loadTasks(false), 3000);
     }
   } catch (e) {
-    document.getElementById('loading-state').innerHTML =
-      `<p style="color:#f44336">오류: ${e.message}</p>`;
+    document.getElementById('loading-state').innerHTML = `<p style="color:#f44336">오류: ${e.message}</p>`;
     btn.disabled = false;
   }
 }
 
+async function batchAnalysis() {
+  const ids = [...selectedIds];
+  if (!ids.length) return;
+  const btn = document.getElementById('batchAnalyzeBtn');
+  btn.disabled = true;
+  btn.textContent = `분석 시작 (${ids.length}개)...`;
+
+  try {
+    const resp = await fetch('/api/batch-analysis', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ block_ids: ids })
+    });
+    const data = await resp.json();
+    btn.textContent = '사전분석';
+    btn.disabled = false;
+    selectedIds.clear();
+    loadTasks(false);
+  } catch(e) {
+    btn.textContent = '오류';
+    btn.disabled = false;
+  }
+}
+
+async function moveToLock() {
+  const ids = [...selectedIds];
+  if (!ids.length || currentTab === 'locked') return;
+  await fetch('/api/lock-tasks', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ block_ids: ids })
+  });
+  const info = document.getElementById('selectInfo');
+  info.textContent = `${ids.length}개 잠금으로 이동 완료`;
+  info.style.color = '#166534';
+  selectedIds.clear();
+  loadTasks(false);
+  setTimeout(() => updateActionBar(), 3000);
+}
+
+async function moveToUnlock() {
+  const ids = [...selectedIds];
+  if (!ids.length || currentTab !== 'locked') return;
+  await fetch('/api/unlock-tasks', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ block_ids: ids })
+  });
+  const info = document.getElementById('selectInfo');
+  info.textContent = `${ids.length}개 완료로 이동 완료`;
+  info.style.color = '#166534';
+  selectedIds.clear();
+  loadTasks(false);
+  setTimeout(() => updateActionBar(), 3000);
+}
+
 loadTasks();
+
+// 작업 중인 항목이 있으면 10초마다 갱신, 아니면 30초마다
+let _dashPoll = null;
+function startDashPolling() {
+  if (_dashPoll) clearInterval(_dashPoll);
+  const hasRunning = allTasks.some(t => t.job_status === 'running');
+  const interval = hasRunning ? 10000 : 30000;
+  _dashPoll = setInterval(() => loadTasks(false), interval);
+}
+
+// 30초마다 새 과제 확인
+setTimeout(() => {
+  startDashPolling();
+  setInterval(async () => {
+    try {
+      const res = await fetch('/api/check-new-tasks');
+      const data = await res.json();
+      if (data.new_tasks && data.new_tasks.length > 0) loadTasks(false);
+    } catch(e) {}
+  }, 30000);
+}, 5000);
 </script>
 </body>
 </html>
