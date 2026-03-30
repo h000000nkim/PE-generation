@@ -459,7 +459,12 @@
 
       <!-- ⑧ 사전분석 결과 (STEP 3+4) -->
     <div id="analysis-section" class="card full hidden">
-      <span class="section-label analysis">사전분석 (STEP 3+4)</span>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="section-label analysis">사전분석 (STEP 3+4)</span>
+        {% if not locked %}
+        <button id="deleteAnalysisBtn" onclick="deleteAnalysis()" style="font-size:0.72rem;padding:3px 8px;border:1px solid #fca5a5;border-radius:4px;background:white;cursor:pointer;color:#dc2626">분석 삭제</button>
+        {% endif %}
+      </div>
       <pre id="analysis-body"></pre>
       <div id="analysis-cost"></div>
     </div>
@@ -864,6 +869,23 @@ async function checkAnalysis() {
       const data = await resp.json();
       if (data.status === "ok") showAnalysis(data);
     }
+  } catch(e) {}
+}
+
+async function deleteAnalysis() {
+  if (!confirm("사전분석 결과를 삭제하시겠습니까?")) return;
+  try {
+    await fetch(`/api/analysis/${BLOCK_ID}`, { method: "DELETE" });
+    document.getElementById("analysis-section").classList.add("hidden");
+    document.getElementById("analysis-body").textContent = "";
+    document.getElementById("analysis-cost").textContent = "";
+    const btn = document.getElementById("analyzeBtn");
+    if (btn) {
+      btn.textContent = "사전분석 실행";
+      btn.style.background = "#f97316";
+    }
+    _analysisReady = false;
+    document.getElementById("launchBtn").style.opacity = "0.4";
   } catch(e) {}
 }
 

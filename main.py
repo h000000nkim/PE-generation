@@ -16,13 +16,21 @@ from modules.notion_parser  import parse_task_from_block, get_my_tasks
 from modules.workspace_launcher import (
     create_workspace, build_instruction, launch_background,
     get_result, save_result, get_workspace_path,
-    launch_pre_analysis, get_analysis, launch_revision, get_job_status,
+    launch_pre_analysis, get_analysis, delete_analysis, launch_revision, get_job_status,
     get_locked_ids, set_locked_ids, get_memo_log, get_warning,
     run_verification,
 )
 
 import json
 import asyncio
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -78,7 +86,8 @@ def _warm_task_cache(block_id: str):
     """detail 페이지 캐시 미리 로드"""
     try:
         task = parse_task_from_block(block_id)
-        _task_cache[block_id] = {"task": task, "ts": _time_mod.time()}
+        with _task_cache_lock:
+            _task_cache[block_id] = {"task": task, "ts": _time_mod.time()}
     except Exception:
         pass
 
@@ -138,7 +147,9 @@ async def debug_task(block_id: str):
 
 # 과제 상세 캐시 (TTL 10분, 최대 20개)
 import time as _time_mod
+import threading as _threading
 _task_cache: dict[str, dict] = {}
+_task_cache_lock = _threading.Lock()
 _TASK_CACHE_TTL = 600
 _TASK_CACHE_MAX = 20
 
@@ -146,7 +157,8 @@ _TASK_CACHE_MAX = 20
 @app.get("/task/{block_id}", response_class=HTMLResponse)
 async def task_detail(request: Request, block_id: str):
     now = _time_mod.time()
-    cached = _task_cache.get(block_id)
+    with _task_cache_lock:
+        cached = _task_cache.get(block_id)
 
     if cached and now - cached["ts"] < _TASK_CACHE_TTL:
         task = cached["task"]
@@ -156,12 +168,14 @@ async def task_detail(request: Request, block_id: str):
                 None, parse_task_from_block, block_id
             )
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-        _task_cache[block_id] = {"task": task, "ts": now}
-        # 캐시 크기 제한 — 가장 오래된 항목 제거
-        if len(_task_cache) > _TASK_CACHE_MAX:
-            oldest = min(_task_cache, key=lambda k: _task_cache[k]["ts"])
-            del _task_cache[oldest]
+            logger.error(f"[detail] 과제 파싱 실패 ({block_id}): {e}")
+            raise HTTPException(status_code=500, detail="과제 정보를 불러올 수 없습니다")
+        with _task_cache_lock:
+            _task_cache[block_id] = {"task": task, "ts": now}
+            # 캐시 크기 제한 — 가장 오래된 항목 제거
+            if len(_task_cache) > _TASK_CACHE_MAX:
+                oldest = min(_task_cache, key=lambda k: _task_cache[k]["ts"])
+                del _task_cache[oldest]
 
     locked = block_id in get_locked_ids()
     return templates.TemplateResponse(
@@ -189,7 +203,8 @@ async def launch_claude(block_id: str, user_memo: str = Form("")):
     try:
         task = parse_task_from_block(block_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Notion 파싱 실패: {str(e)}")
+        logger.error(f"[launch-claude] Notion 파싱 실패 ({block_id}): {e}")
+        raise HTTPException(status_code=500, detail="Notion 파싱 실패")
 
     workspace = await asyncio.get_event_loop().run_in_executor(
         None, create_workspace, task
@@ -247,9 +262,9 @@ def _auto_prepare_task(block_id: str):
     try:
         task = parse_task_from_block(block_id)
         ws = create_workspace(task)
-        print(f"[auto-prepare] {task.get('title', block_id)} 워크스페이스 생성 완료: {ws}")
+        logger.info(f"[auto-prepare] {task.get('title', block_id)} 워크스페이스 생성 완료: {ws}")
     except Exception as e:
-        print(f"[auto-prepare] {block_id} 실패: {e}")
+        logger.error(f"[auto-prepare] {block_id} 실패: {e}")
 
 
 # ──────────────────────────────────────────────
@@ -288,7 +303,18 @@ async def api_run_analysis(block_id: str):
             "message": "Terminal에서 사전분석이 시작되었습니다." if success else "Terminal 실행 실패"
         })
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[analysis] 사전분석 실패 ({block_id}): {e}")
+        raise HTTPException(status_code=500, detail="사전분석 실행에 실패했습니다")
+
+
+@app.delete("/api/analysis/{block_id}")
+async def api_delete_analysis(block_id: str):
+    """사전분석 결과 삭제"""
+    _check_locked(block_id)
+    deleted = delete_analysis(block_id)
+    if not deleted:
+        return JSONResponse({"status": "not_found"}, status_code=404)
+    return JSONResponse({"status": "ok"})
 
 
 # ──────────────────────────────────────────────
@@ -320,7 +346,8 @@ async def revise_output(block_id: str, revision_memo: str = Form(...)):
             "message": "Terminal에서 수정이 시작되었습니다." if success else "Terminal 실행 실패"
         })
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[revise] 수정 실패 ({block_id}): {e}")
+        raise HTTPException(status_code=500, detail="수정 실행에 실패했습니다")
 
 
 @app.get("/api/warning/{block_id}")
@@ -429,16 +456,33 @@ async def download_file(block_id: str, filename: str):
     ws = get_workspace_path(block_id)
     if not ws:
         raise HTTPException(status_code=404, detail="워크스페이스를 찾을 수 없습니다")
-    file_path = ws / filename
+    # Path Traversal 방어: 파일명에 경로 구분자 차단 + resolve 검증
+    if '/' in filename or '\\' in filename or '..' in filename:
+        raise HTTPException(status_code=400, detail="잘못된 파일명입니다")
+    file_path = (ws / filename).resolve()
+    if not file_path.is_relative_to(ws.resolve()):
+        raise HTTPException(status_code=403, detail="접근이 거부되었습니다")
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다")
     return FileResponse(file_path, filename=filename)
 
 
+_PROXY_ALLOWED_DOMAINS = {
+    "www.notion.so", "notion.so", "s3.us-west-2.amazonaws.com",
+    "prod-files-secure.s3.us-west-2.amazonaws.com",
+    "file.notion.so", "export-download.canva.com",
+}
+
 @app.get("/api/proxy-file")
 async def proxy_file(url: str):
-    """외부 URL을 프록시하여 CORS 우회"""
+    """외부 URL을 프록시하여 CORS 우회 (허용 도메인만)"""
     import httpx
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="허용되지 않는 프로토콜입니다")
+    if parsed.hostname not in _PROXY_ALLOWED_DOMAINS:
+        raise HTTPException(status_code=403, detail=f"허용되지 않는 도메인입니다: {parsed.hostname}")
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
             resp = await client.get(url)
@@ -449,8 +493,8 @@ async def proxy_file(url: str):
                 media_type=ct,
                 headers={"Content-Disposition": "inline"}
             )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail="외부 파일 요청 실패")
 
 
 # ──────────────────────────────────────────────
@@ -469,7 +513,8 @@ async def api_verify(block_id: str):
             "message": "검증이 시작되었습니다." if success else "검증 실행 실패"
         })
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[verify] 검증 실패 ({block_id}): {e}")
+        raise HTTPException(status_code=500, detail="검증 실행에 실패했습니다")
 
 
 @app.get("/api/verify/{block_id}")
@@ -489,4 +534,5 @@ async def api_get_verification(block_id: str):
 # ──────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    is_dev = os.getenv("ENV", "dev") == "dev"
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=is_dev)

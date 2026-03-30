@@ -5,28 +5,38 @@ Notion 비공식 API 파서 (비동기 병렬 버전)
 import os
 import asyncio
 import time
+import logging
 import requests
 import httpx
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+from dotenv import load_dotenv
+load_dotenv()
 
 HEADERS = {
     "Content-Type": "application/json",
     "User-Agent":   "Mozilla/5.0"
 }
 NOTION_BASE   = "https://www.notion.so/api/v3"
-COLLECTION_ID = "d25a15be-d215-4ad0-ab35-618729fdd0b3"
-SPACE_ID      = "02ad9178-8750-46bf-aa9e-e5d704cecb8a"
-VIEW_ID       = "032050be-e46c-4403-8ccc-5556016e40c9"
+
+# Notion ID — .env에서 로드 (fallback: 기본값)
+COLLECTION_ID     = os.getenv("NOTION_COLLECTION_ID",     "d25a15be-d215-4ad0-ab35-618729fdd0b3")
+SPACE_ID          = os.getenv("NOTION_SPACE_ID",           "02ad9178-8750-46bf-aa9e-e5d704cecb8a")
+VIEW_ID           = os.getenv("NOTION_VIEW_ID",            "032050be-e46c-4403-8ccc-5556016e40c9")
 
 # 대시보드 — 담당 멘토 필터용
-DASHBOARD_VIEW_ID = "21146991-dbbd-808c-b149-000cb8eff257"
-MY_USER_ID        = "0705e077-d8dc-4ff5-b0ef-5e45c4e65477"   # 훈 김
-MENTOR_PROP_KEY   = "~~_I"
+DASHBOARD_VIEW_ID = os.getenv("NOTION_DASHBOARD_VIEW_ID", "21146991-dbbd-808c-b149-000cb8eff257")
+MY_USER_ID        = os.getenv("NOTION_MY_USER_ID",         "0705e077-d8dc-4ff5-b0ef-5e45c4e65477")
+MENTOR_PROP_KEY   = os.getenv("NOTION_MENTOR_PROP_KEY",    "~~_I")
 
 # 내 과업 캐시 (TTL: 30분) + 디스크 영속화
 import json as _json
+import threading as _threading
 _CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "workspaces", ".tasks_cache.json")
 _my_tasks_cache: dict = {"tasks": None, "ts": 0.0, "loading": False}
+_cache_lock = _threading.Lock()
 MY_TASKS_TTL = 1800
 
 # 서버 시작 시 디스크 캐시 로드
@@ -36,8 +46,8 @@ try:
             _disk = _json.load(f)
         _my_tasks_cache["tasks"] = _disk.get("tasks")
         _my_tasks_cache["ts"] = _disk.get("ts", 0.0)
-except Exception:
-    pass
+except Exception as e:
+    logger.warning(f"[notion] 디스크 캐시 로드 실패: {e}")
 
 
 def _get_text(props: dict, key: str) -> str:
@@ -124,9 +134,11 @@ def _fetch_past_tasks_summary(task_ids: list) -> list:
                 headers=HEADERS, timeout=20
             )
             if r.status_code != 200:
+                logger.warning(f"[notion] 과거 과제 배치 fetch 실패: status {r.status_code}")
                 continue
             blocks = r.json().get("recordMap", {}).get("block", {})
-        except Exception:
+        except Exception as e:
+            logger.warning(f"[notion] 과거 과제 배치 fetch 예외: {e}")
             continue
         for bid in batch:
             props = blocks.get(bid, {}).get("value", {}).get("properties", {})
@@ -215,7 +227,8 @@ def _fetch_nametag(nametag_id: str) -> dict:
 
         fixed["extra_fields"] = extra
         return fixed
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[notion] 네임택 파싱 실패 ({nametag_id}): {e}")
         return {}
 
 
@@ -295,8 +308,8 @@ def get_signed_urls(file_urls: list, block_id: str) -> list:
             )
             if resp.status_code == 200:
                 signed = resp.json().get("signedUrls", []) + external
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[notion] signed URL 요청 실패: {e}")
     return signed
 
 
@@ -390,6 +403,15 @@ def fetch_task_list(page_id: str, limit: int = 50) -> list:
                      .get("blockIds", []))
     if not block_ids:
         return []
+    # 이미 실행 중인 이벤트 루프가 있으면 새 루프 생성, 없으면 asyncio.run 사용
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            return pool.submit(asyncio.run, _fetch_all(block_ids)).result()
     return asyncio.run(_fetch_all(block_ids))
 
 
@@ -444,9 +466,11 @@ def _fetch_my_tasks_blocking() -> list:
                 headers=HEADERS, timeout=20
             )
             if r.status_code != 200:
+                logger.warning(f"[notion] 멘토 필터 배치 fetch 실패: status {r.status_code}")
                 continue
             blocks = r.json().get("recordMap", {}).get("block", {})
-        except Exception:
+        except Exception as e:
+            logger.warning(f"[notion] 멘토 필터 배치 fetch 예외: {e}")
             continue
 
         for bid in batch:
@@ -473,25 +497,36 @@ def _fetch_my_tasks_blocking() -> list:
 
 def _do_fetch_and_cache() -> list:
     """Notion에서 실제로 fetch 후 캐시에 저장"""
-    global _my_tasks_cache
-    _my_tasks_cache["loading"] = True
+    with _cache_lock:
+        _my_tasks_cache["loading"] = True
     try:
         tasks = _fetch_my_tasks_blocking()
-        _my_tasks_cache["tasks"] = tasks
-        _my_tasks_cache["ts"]    = time.time()
+        with _cache_lock:
+            _my_tasks_cache["tasks"] = tasks
+            _my_tasks_cache["ts"]    = time.time()
         os.makedirs(os.path.dirname(_CACHE_FILE), exist_ok=True)
-        with open(_CACHE_FILE, "w", encoding="utf-8") as f:
-            _json.dump({"tasks": tasks, "ts": _my_tasks_cache["ts"]}, f, ensure_ascii=False)
+        # 원자적 파일 쓰기: 임시파일 → rename
+        import tempfile
+        tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(_CACHE_FILE), suffix=".tmp")
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                _json.dump({"tasks": tasks, "ts": _my_tasks_cache["ts"]}, f, ensure_ascii=False)
+            os.replace(tmp_path, _CACHE_FILE)
+        except Exception:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            raise
         return tasks
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[notion] 과업 목록 갱신 실패: {e}")
         return _my_tasks_cache.get("tasks") or []
     finally:
-        _my_tasks_cache["loading"] = False
+        with _cache_lock:
+            _my_tasks_cache["loading"] = False
 
 
 def get_my_tasks(force: bool = False) -> dict:
     """캐시된 내 과업 목록 반환. {'status': 'ok'|'loading', 'tasks': [...]}"""
-    global _my_tasks_cache
     now = time.time()
 
     # force=True: 동기로 즉시 재조회
@@ -499,22 +534,23 @@ def get_my_tasks(force: bool = False) -> dict:
         tasks = _do_fetch_and_cache()
         return {"status": "ok", "tasks": tasks}
 
-    # 캐시 유효
-    if _my_tasks_cache["tasks"] is not None:
-        if now - _my_tasks_cache["ts"] < MY_TASKS_TTL:
-            return {"status": "ok", "tasks": _my_tasks_cache["tasks"]}
+    with _cache_lock:
+        # 캐시 유효
+        if _my_tasks_cache["tasks"] is not None:
+            if now - _my_tasks_cache["ts"] < MY_TASKS_TTL:
+                return {"status": "ok", "tasks": _my_tasks_cache["tasks"]}
 
-    # 이미 로딩 중
-    if _my_tasks_cache["loading"]:
-        cached = _my_tasks_cache["tasks"]
-        if cached is not None:
-            return {"status": "ok", "tasks": cached}
-        return {"status": "loading", "tasks": []}
+        # 이미 로딩 중
+        if _my_tasks_cache["loading"]:
+            cached = _my_tasks_cache["tasks"]
+            if cached is not None:
+                return {"status": "ok", "tasks": cached}
+            return {"status": "loading", "tasks": []}
 
     # 백그라운드 스레드에서 갱신 (일반 TTL 만료 시)
-    import threading
-    threading.Thread(target=_do_fetch_and_cache, daemon=True).start()
+    _threading.Thread(target=_do_fetch_and_cache, daemon=True).start()
 
-    if _my_tasks_cache["tasks"] is not None:
-        return {"status": "ok", "tasks": _my_tasks_cache["tasks"]}
+    with _cache_lock:
+        if _my_tasks_cache["tasks"] is not None:
+            return {"status": "ok", "tasks": _my_tasks_cache["tasks"]}
     return {"status": "loading", "tasks": []}
