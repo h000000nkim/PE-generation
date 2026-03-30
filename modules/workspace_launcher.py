@@ -180,6 +180,32 @@ def create_workspace(task: dict) -> Path:
                         encoding="utf-8"
                     )
                 doc.close()
+            elif fname.lower().endswith(".hwpx"):
+                import zipfile
+                with zipfile.ZipFile(str(fpath)) as zf:
+                    texts = []
+                    # section XML에서 텍스트 추출
+                    for zname in zf.namelist():
+                        if re.match(r'Contents/section\d+\.xml$', zname):
+                            xml = zf.read(zname).decode("utf-8")
+                            for m in re.finditer(r'<hp:t[^>]*>([^<]+)</hp:t>', xml):
+                                texts.append(m.group(1))
+                    # PrvText.txt 대체
+                    if not texts and "Preview/PrvText.txt" in zf.namelist():
+                        t = zf.read("Preview/PrvText.txt").decode("utf-8", errors="ignore").strip()
+                        if t:
+                            texts.append(t)
+                    if texts:
+                        txt_path.write_text("\n".join(texts), encoding="utf-8")
+                    else:
+                        # 미리보기 이미지라도 추출
+                        if "Preview/PrvImage.png" in zf.namelist():
+                            img_path = files_dir / f"{fname}_preview.png"
+                            img_path.write_bytes(zf.read("Preview/PrvImage.png"))
+                            txt_path.write_text(
+                                f"HWPX — 텍스트 없음. 미리보기 이미지로 변환됨:\n  - {fname}_preview.png",
+                                encoding="utf-8"
+                            )
         except Exception as e:
             logger.warning(f"[workspace] 텍스트 추출 실패 ({fname}): {e}")
 
@@ -420,6 +446,21 @@ def get_memo_log(block_id: str) -> list:
     if log_file.exists():
         return json.loads(log_file.read_text(encoding="utf-8"))
     return []
+
+
+def get_verification_status(block_id: str) -> str | None:
+    """검증 상태 조회 — pass/fail/warning/None"""
+    ws = get_workspace_path(block_id)
+    if not ws:
+        return None
+    vf = ws / "verification.json"
+    if not vf.exists():
+        return None
+    try:
+        data = json.loads(vf.read_text(encoding="utf-8"))
+        return data.get("status")
+    except Exception:
+        return None
 
 
 def run_verification(task: dict) -> bool:
@@ -702,6 +743,9 @@ def launch_background(workspace_path: Path, instruction: str, block_id: str, lab
             _attach_result_to_log(block_id, warning)
             # 완료된 job의 임시 파일 정리 (최신 1개만 유지)
             _cleanup_job_files(Path(ws))
+            # 초안 작성 성공 시 자동 검증 트리거
+            if label == "초안 작성" and proc.returncode == 0 and not warning:
+                _auto_verify(block_id)
 
         threading.Thread(target=_watch, daemon=True).start()
         return True
@@ -745,6 +789,25 @@ def get_warning(block_id: str) -> dict | None:
     if wpath.exists():
         return json.loads(wpath.read_text(encoding="utf-8"))
     return None
+
+
+def _auto_verify(block_id: str):
+    """초안 작성 완료 후 자동 검증 트리거"""
+    try:
+        # result.json이 있는지 확인
+        ws = get_workspace_path(block_id)
+        if not ws:
+            return
+        result_file = ws / "result.json"
+        if not result_file.exists():
+            return
+        # notion_parser를 여기서 import (순환 import 방지)
+        from modules.notion_parser import parse_task_from_block
+        task = parse_task_from_block(block_id)
+        run_verification(task)
+        logger.info(f"[auto-verify] {task.get('title', block_id)} 자동 검증 시작")
+    except Exception as e:
+        logger.error(f"[auto-verify] {block_id} 실패: {e}")
 
 
 def _cleanup_job_files(workspace: Path):

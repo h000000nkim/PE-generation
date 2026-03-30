@@ -12,8 +12,8 @@
   "outputs": [
     {
       "label": "산출물 이름 (예: 보고서, 발표대본, 구글폼 응답 등)",
-      "type": "docx | pptx | text | form",
-      "file": "파일명 (예: report.docx, script.docx)",
+      "type": "docx | pptx | form",
+      "file": "파일명",
       "canva_edit_url": "Canva 편집 URL (pptx인 경우만)",
       "canva_view_url": "Canva 보기 URL (pptx인 경우만)",
       "pptx_download_url": "PPTX 다운로드 URL (pptx인 경우만)"
@@ -24,6 +24,20 @@
 - 산출물 하나당 배열 요소 하나
 - type이 docx이면 Word MCP로 .docx 파일 생성 후 file에 파일명 기록
 - type이 pptx이면 Canva로 생성 후 URL 기록
-- type이 text이면 .md 파일로 저장 (자필 유인물 등 docx 불필요한 경우)
-- type이 form이면 구글폼 응답을 .md 파일로 저장
+- type이 form이면 구글폼 응답을 .docx 파일로 저장
+- **자필(유인물) 형식도 반드시 docx로 저장** — 학생이 옮겨 쓸 원본용
 - 모든 산출물의 텍스트 원문은 반드시 개별 파일로도 저장할 것
+
+## 파일명 규칙
+`과목_과제제목_이름.확장자` 형식으로 저장한다.
+
+- 산출물이 1개인 경우: `과목_과제제목_이름.docx`
+  - 예) `진로_왜세상의절반은굶주리는가_김하율.docx`
+- 산출물이 여러 개인 경우: 과제제목과 이름 사이에 `_파일종류_`를 넣는다
+  - 예) `음악감상과비평_불꽃이들려주는음악의밤_구글폼_남수민.docx`
+  - 예) `음악감상과비평_불꽃이들려주는음악의밤_대본_남수민.docx`
+  - 예) `음악감상과비평_불꽃이들려주는음악의밤_ppt_남수민.pptx`
+  - 예) `음악감상과비평_불꽃이들려주는음악의밤_예상질문_남수민.docx`
+- 과목명은 CLAUDE.md의 `과목(mGaa)` 값을 사용 (공백 제거)
+- 과제제목은 핵심 주제를 간결하게 (공백 제거, 특수문자 제거)
+- 이름은 CLAUDE.md의 `이름` 값 그대로 사용

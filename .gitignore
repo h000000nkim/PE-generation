@@ -28,7 +28,14 @@ Thumbs.db
 
 # Generated output
 my_tasks.json
-workspaces/
+
+# Workspaces — 데이터는 올리되 임시 파일 제외
+workspaces/**/.output_*
+workspaces/**/.error_*
+workspaces/**/.prompt_*
+workspaces/**/.expect_*
+workspaces/**/.warning.json
+workspaces/**/.claude/
 
 # Test files
 check_*.py

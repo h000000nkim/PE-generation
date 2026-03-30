@@ -1,0 +1,34 @@
+{
+  "outputs": [
+    {
+      "label": "구글폼 응답 (13개 항목, 표 형식)",
+      "type": "docx",
+      "file": "구글폼_응답.docx"
+    },
+    {
+      "label": "발표용 PPT",
+      "type": "pptx",
+      "file": "Ignite_불꽃이_들려주는_음악의_밤.pptx",
+      "canva_edit_url": "https://www.canva.com/d/YpVOQ3DSSm_9jLa",
+      "canva_view_url": "https://www.canva.com/d/qCQvJFQTXApGiSU",
+      "pptx_download_url": "https://export-download.canva.com/QeCD4/DAHFV5QeCD4/-1/6106253647625283266.pptx?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAQYCGKMUH5AO7UJ26%2F20260329%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260329T144346Z&X-Amz-Expires=7183&X-Amz-Signature=2ad008d5ee8b747ae0a15e3df489a2aacca6a8067935b8b4d1854a7cc8bf0927&X-Amz-SignedHeaders=host%3Bx-amz-expected-bucket-owner&response-expires=Sun%2C%2029%20Mar%202026%2016%3A43%3A29%20GMT",
+      "preview_images": [
+        "https://export-download.canva.com/QeCD4/DAHFV5QeCD4/-1/0/0001-50038050677348308.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAQYCGKMUH5AO7UJ26%2F20260329%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260329T103136Z&X-Amz-Expires=21114&X-Amz-Signature=12759cf43369b7b20ee1d614ae5d255639e094cf3712896272d1305547e00704&X-Amz-SignedHeaders=host%3Bx-amz-expected-bucket-owner&response-expires=Sun%2C%2029%20Mar%202026%2016%3A23%3A30%20GMT",
+        "https://export-download.canva.com/QeCD4/DAHFV5QeCD4/-1/0/0002-50038050677348308.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAQYCGKMUH5AO7UJ26%2F20260329%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260329T150415Z&X-Amz-Expires=7304&X-Amz-Signature=5157ff1d089e136148234b1074303c3d730aea7165c75bd51a7007df16dcf062&X-Amz-SignedHeaders=host%3Bx-amz-expected-bucket-owner&response-expires=Sun%2C%2029%20Mar%202026%2017%3A05%3A59%20GMT",
+        "https://export-download.canva.com/QeCD4/DAHFV5QeCD4/-1/0/0003-50038050677348308.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAQYCGKMUH5AO7UJ26%2F20260328%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260328T230136Z&X-Amz-Expires=65124&X-Amz-Signature=3b85af307910d85b64011cb95bc374befb258d8ba442b969f027963b88401efa&X-Amz-SignedHeaders=host%3Bx-amz-expected-bucket-owner&response-expires=Sun%2C%2029%20Mar%202026%2017%3A07%3A00%20GMT",
+        "https://export-download.canva.com/QeCD4/DAHFV5QeCD4/-1/0/0004-50038050677348308.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAQYCGKMUH5AO7UJ26%2F20260328%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260328T185315Z&X-Amz-Expires=79380&X-Amz-Signature=b17c2d1297c5f4b412c65bb81668124b979532605dbc91d7c166c9561fa47db5&X-Amz-SignedHeaders=host%3Bx-amz-expected-bucket-owner&response-expires=Sun%2C%2029%20Mar%202026%2016%3A56%3A15%20GMT",
+        "https://export-download.canva.com/QeCD4/DAHFV5QeCD4/-1/0/0005-50038050677348308.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAQYCGKMUH5AO7UJ26%2F20260328%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260328T165136Z&X-Amz-Expires=85210&X-Amz-Signature=6195c2cedadfdd79ddeae4a8046643c18b4166d3f366528179df013dcd28141f&X-Amz-SignedHeaders=host%3Bx-amz-expected-bucket-owner&response-expires=Sun%2C%2029%20Mar%202026%2016%3A31%3A46%20GMT"
+      ]
+    },
+    {
+      "label": "발표 대본 (슬라이드별)",
+      "type": "docx",
+      "file": "발표대본.docx"
+    },
+    {
+      "label": "예상 압박 질문 및 답변 (12문항)",
+      "type": "docx",
+      "file": "예상질문_답변.docx"
+    }
+  ]
+}

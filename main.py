@@ -18,7 +18,7 @@ from modules.workspace_launcher import (
     get_result, save_result, get_workspace_path,
     launch_pre_analysis, get_analysis, delete_analysis, launch_revision, get_job_status,
     get_locked_ids, set_locked_ids, get_memo_log, get_warning,
-    run_verification,
+    run_verification, get_verification_status,
 )
 
 import json
@@ -74,6 +74,7 @@ async def api_my_tasks(refresh: bool = False):
             t["job_status"] = job["status"] if job else None
             t["job_label"] = job["label"] if job else None
             t["job_elapsed"] = job["elapsed_seconds"] if job else None
+            t["verify_status"] = get_verification_status(t["block_id"])
         # detail 페이지 캐시 워밍 (백그라운드)
         for t in result["tasks"]:
             bid = t["block_id"]
@@ -471,6 +472,7 @@ _PROXY_ALLOWED_DOMAINS = {
     "www.notion.so", "notion.so", "s3.us-west-2.amazonaws.com",
     "prod-files-secure.s3.us-west-2.amazonaws.com",
     "file.notion.so", "export-download.canva.com",
+    "storage.tally.so",
 }
 
 @app.get("/api/proxy-file")
@@ -527,6 +529,27 @@ async def api_get_verification(block_id: str):
     if verify_file.exists():
         return JSONResponse(json.loads(verify_file.read_text(encoding="utf-8")))
     return JSONResponse({"status": "not_found"}, status_code=404)
+
+
+@app.post("/api/batch-verify")
+async def batch_verify(request: Request):
+    """선택된 과제들 일괄 검증"""
+    data = await request.json()
+    block_ids = data.get("block_ids", [])
+
+    def _run_batch():
+        results = []
+        for bid in block_ids:
+            try:
+                task = parse_task_from_block(bid)
+                success = run_verification(task)
+                results.append({"block_id": bid, "success": success})
+            except Exception as e:
+                results.append({"block_id": bid, "success": False, "error": str(e)})
+        return results
+
+    results = await asyncio.get_event_loop().run_in_executor(None, _run_batch)
+    return JSONResponse({"status": "ok", "results": results})
 
 
 # ──────────────────────────────────────────────

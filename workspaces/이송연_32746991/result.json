@@ -1,0 +1,9 @@
+{
+  "outputs": [
+    {
+      "label": "진로 활동 보고서",
+      "type": "docx",
+      "file": "result.docx"
+    }
+  ]
+}

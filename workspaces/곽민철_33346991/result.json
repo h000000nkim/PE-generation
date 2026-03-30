@@ -1,0 +1,15 @@
+{
+  "outputs": [
+    {
+      "label": "보고서 (인공지능의 활용 사례와 나의 진로 탐구)",
+      "type": "docx",
+      "file": "result.docx",
+      "docx_path": "result.docx"
+    },
+    {
+      "label": "보고서 텍스트 원문",
+      "type": "text",
+      "file": "result.md"
+    }
+  ]
+}

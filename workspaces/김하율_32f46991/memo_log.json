@@ -1,0 +1,15 @@
+[
+  {
+    "action": "수정 요청",
+    "memo": "워드파일로 만들어서 줘",
+    "timestamp": "2026-03-30 23:40:18",
+    "result_snapshot": [
+      {
+        "label": "역사일기 쓰기",
+        "type": "docx",
+        "file": "한국사_역사일기쓰기_김하율.docx"
+      }
+    ],
+    "error": null
+  }
+]

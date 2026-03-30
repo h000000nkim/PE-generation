@@ -110,6 +110,7 @@
 
     <div class="action-bar" id="action-bar">
       <button class="btn analyze" onclick="batchAnalysis()" id="batchAnalyzeBtn" disabled>사전분석</button>
+      <button class="btn" onclick="batchVerify()" id="batchVerifyBtn" disabled style="background:#7c3aed">검증</button>
       <button class="btn lock" onclick="moveToLock()" id="lockBtn" disabled>잠금으로 이동</button>
       <button class="btn unlock" onclick="moveToUnlock()" id="unlockBtn" disabled>완료로 이동</button>
       <span class="select-info" id="selectInfo">항목을 선택하세요</span>
@@ -174,6 +175,12 @@ function progressBadges(t) {
   if (t.has_result && !(isRunning && (runLabel === '초안 작성' || runLabel === '수정'))) {
     html += '<span class="analysis-badge" style="background:#d1fae5;color:#065f46">초안완료</span>';
   }
+  // 검증 상태
+  if (t.verify_status && !(isRunning && runLabel === '검증')) {
+    const vc = {pass:'background:#d1fae5;color:#065f46', fail:'background:#fecaca;color:#991b1b', warning:'background:#fef3c7;color:#92400e'};
+    const vl = {pass:'검증통과', fail:'검증실패', warning:'검증경고'};
+    html += `<span class="analysis-badge" style="${vc[t.verify_status] || ''}">${vl[t.verify_status] || t.verify_status}</span>`;
+  }
   return html;
 }
 
@@ -215,6 +222,7 @@ function updateActionBar() {
   info.style.color = '#888';
 
   document.getElementById('batchAnalyzeBtn').disabled = n === 0;
+  document.getElementById('batchVerifyBtn').disabled = n === 0;
   // 잠금 탭에서는 "잠금으로 이동" 비활성, 반대도 마찬가지
   document.getElementById('lockBtn').disabled = n === 0 || currentTab === 'locked';
   document.getElementById('unlockBtn').disabled = n === 0 || currentTab !== 'locked';
@@ -300,6 +308,29 @@ async function batchAnalysis() {
     });
     const data = await resp.json();
     btn.textContent = '사전분석';
+    btn.disabled = false;
+    selectedIds.clear();
+    loadTasks(false);
+  } catch(e) {
+    btn.textContent = '오류';
+    btn.disabled = false;
+  }
+}
+
+async function batchVerify() {
+  const ids = [...selectedIds];
+  if (!ids.length) return;
+  const btn = document.getElementById('batchVerifyBtn');
+  btn.disabled = true;
+  btn.textContent = `검증 시작 (${ids.length}개)...`;
+
+  try {
+    const resp = await fetch('/api/batch-verify', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ block_ids: ids })
+    });
+    const data = await resp.json();
+    btn.textContent = '검증';
     btn.disabled = false;
     selectedIds.clear();
     loadTasks(false);

@@ -1082,12 +1082,119 @@ function previewFile(url, name) {
   } else if (ext === 'docx') {
     previewDocxUrl(url, name);
   } else if (ext === 'pptx') {
-    window.open(url, '_blank');
-    return;
+    previewPptxUrl(url, name);
+  } else if (ext === 'hwpx') {
+    previewHwpx(url, name);
+  } else if (ext === 'hwp') {
+    previewUnsupported(url, name, 'HWP(구형) 파일은 브라우저 미리보기를 지원하지 않습니다.');
   } else {
-    window.open(url, '_blank');
-    return;
+    previewUnsupported(url, name, '이 파일 형식은 브라우저 미리보기를 지원하지 않습니다.');
   }
+}
+
+async function previewPptxUrl(url, name) {
+  const pUrl = proxyUrl(url);
+  document.getElementById('preview-title').textContent = name;
+  const body = document.getElementById('preview-body');
+  body.innerHTML = '<div style="text-align:center;padding:40px;color:#888">PPTX 로딩 중...</div>';
+  showDownloadBtn(pUrl);
+  document.getElementById('preview-modal').classList.remove('hidden');
+
+  try {
+    const resp = await fetch(pUrl);
+    const blob = await resp.blob();
+    const zip = await JSZip.loadAsync(blob);
+    // 슬라이드 이미지 추출 (thumbnail 또는 슬라이드 XML에서 텍스트)
+    const slides = [];
+    for (const [path, file] of Object.entries(zip.files)) {
+      if (path.match(/ppt\/slides\/slide\d+\.xml$/)) {
+        const xml = await file.async('text');
+        // XML에서 텍스트 추출
+        const texts = [];
+        const matches = xml.matchAll(/<a:t>([^<]+)<\/a:t>/g);
+        for (const m of matches) texts.push(m[1]);
+        slides.push({num: parseInt(path.match(/slide(\d+)/)[1]), text: texts.join(' ')});
+      }
+    }
+    slides.sort((a,b) => a.num - b.num);
+    if (slides.length) {
+      body.innerHTML = `<div style="padding:20px;overflow-y:auto;height:100%">
+        ${slides.map(s => `<div style="margin-bottom:16px;padding:16px;background:#f9f9f9;border-radius:8px;border:1px solid #e5e5e5">
+          <div style="font-size:0.75rem;color:#888;margin-bottom:6px">Slide ${s.num}</div>
+          <div style="font-size:0.9rem;line-height:1.6">${s.text || '(텍스트 없음)'}</div>
+        </div>`).join('')}
+      </div>`;
+    } else {
+      body.innerHTML = '<div style="text-align:center;padding:40px;color:#888">슬라이드 텍스트를 추출할 수 없습니다.</div>';
+    }
+  } catch(e) {
+    body.innerHTML = `<div style="text-align:center;padding:40px;color:#f44336">미리보기 실패: ${e.message}</div>`;
+  }
+}
+
+async function previewHwpx(url, name) {
+  const pUrl = proxyUrl(url);
+  document.getElementById('preview-title').textContent = name;
+  const body = document.getElementById('preview-body');
+  body.innerHTML = '<div style="text-align:center;padding:40px;color:#888">HWPX 로딩 중...</div>';
+  showDownloadBtn(pUrl);
+  document.getElementById('preview-modal').classList.remove('hidden');
+
+  try {
+    const resp = await fetch(pUrl);
+    const blob = await resp.blob();
+    const zip = await JSZip.loadAsync(blob);
+
+    let html = '';
+
+    // 1. 미리보기 이미지
+    const prvImg = zip.file('Preview/PrvImage.png');
+    if (prvImg) {
+      const imgData = await prvImg.async('base64');
+      html += `<div style="text-align:center;margin-bottom:16px"><img src="data:image/png;base64,${imgData}" style="max-width:100%;border:1px solid #e5e5e5;border-radius:4px" /></div>`;
+    }
+
+    // 2. 텍스트 추출 (section*.xml에서 hp:t 태그)
+    const texts = [];
+    for (const [path, file] of Object.entries(zip.files)) {
+      if (path.match(/Contents\/section\d+\.xml$/)) {
+        const xml = await file.async('text');
+        const matches = xml.matchAll(/<hp:t[^>]*>([^<]+)<\/hp:t>/g);
+        for (const m of matches) texts.push(m[1]);
+      }
+    }
+
+    // 3. PrvText.txt 대체 시도
+    if (!texts.length) {
+      const prvTxt = zip.file('Preview/PrvText.txt');
+      if (prvTxt) {
+        const t = await prvTxt.async('text');
+        if (t.trim()) texts.push(t.trim());
+      }
+    }
+
+    if (texts.length) {
+      html += `<div style="padding:16px;background:#f9f9f9;border-radius:8px;font-size:0.9rem;line-height:1.8;white-space:pre-wrap">${texts.join('\n')}</div>`;
+    } else if (!prvImg) {
+      html = '<div style="text-align:center;padding:40px;color:#888">내용을 추출할 수 없습니다.</div>';
+    }
+
+    body.innerHTML = `<div style="padding:20px;overflow-y:auto;height:100%">${html}</div>`;
+  } catch(e) {
+    body.innerHTML = `<div style="text-align:center;padding:40px;color:#f44336">미리보기 실패: ${e.message}</div>`;
+  }
+}
+
+function previewUnsupported(url, name, msg) {
+  const pUrl = proxyUrl(url);
+  document.getElementById('preview-title').textContent = name;
+  document.getElementById('preview-body').innerHTML =
+    `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;padding:20px">
+      <div style="font-size:3rem">📄</div>
+      <div style="font-size:0.95rem;color:#666;text-align:center">${msg}</div>
+      <a href="${pUrl}" target="_blank" style="padding:10px 24px;background:#3b82f6;color:white;border-radius:8px;text-decoration:none;font-weight:600;font-size:0.9rem">다운로드</a>
+    </div>`;
+  document.getElementById('preview-modal').classList.remove('hidden');
 }
 
 function previewImage(url, name) {

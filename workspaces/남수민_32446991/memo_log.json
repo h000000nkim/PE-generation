@@ -1,0 +1,107 @@
+[
+  {
+    "action": "수정 요청",
+    "memo": "ppt가없잖아. 그리고 구글폼 응답파일은 질문을 왼쪽 응답을 오른쪽 셀로하는 표로 만들어줘",
+    "timestamp": "2026-03-29 21:16:57"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt가없잖아. 그리고 구글폼 응답파일은 질문을 왼쪽 응답을 오른쪽 셀로하는 표로 만들어줘",
+    "timestamp": "2026-03-29 21:22:10"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt만들어와",
+    "timestamp": "2026-03-29 21:45:13"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt만들어",
+    "timestamp": "2026-03-29 22:15:44"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt만들어",
+    "timestamp": "2026-03-29 22:20:39"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt만들어",
+    "timestamp": "2026-03-29 22:48:49"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt만들어",
+    "timestamp": "2026-03-29 23:17:27"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt만들어",
+    "timestamp": "2026-03-29 23:22:04"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt만들어",
+    "timestamp": "2026-03-29 23:22:59"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt만들어",
+    "timestamp": "2026-03-29 23:23:42"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt만들어",
+    "timestamp": "2026-03-29 23:24:23"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt만들어",
+    "timestamp": "2026-03-29 23:30:01"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt만들어",
+    "timestamp": "2026-03-29 23:30:18"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt만들어",
+    "timestamp": "2026-03-29 23:30:34"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt만들어",
+    "timestamp": "2026-03-29 23:30:50"
+  },
+  {
+    "action": "수정 요청",
+    "memo": "ppt만들어",
+    "timestamp": "2026-03-29 23:31:07",
+    "error": null,
+    "result_snapshot": [
+      {
+        "label": "구글폼 응답 (13개 항목, 표 형식)",
+        "type": "docx",
+        "file": "구글폼_응답.docx"
+      },
+      {
+        "label": "발표용 PPT",
+        "type": "pptx",
+        "file": "Ignite_불꽃이_들려주는_음악의_밤.pptx",
+        "canva_edit_url": "https://www.canva.com/d/YpVOQ3DSSm_9jLa",
+        "pptx_download_url": "https://export-download.canva.com/QeCD4/DAHFV5QeCD4/-1/6106253647625283266.pptx?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAQYCGKMUH5AO7UJ26%2F20260329%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260329T144346Z&X-Amz-Expires=7183&X-Amz-Signature=2ad008d5ee8b747ae0a15e3df489a2aacca6a8067935b8b4d1854a7cc8bf0927&X-Amz-SignedHeaders=host%3Bx-amz-expected-bucket-owner&response-expires=Sun%2C%2029%20Mar%202026%2016%3A43%3A29%20GMT"
+      },
+      {
+        "label": "발표 대본 (슬라이드별)",
+        "type": "docx",
+        "file": "발표대본.docx"
+      },
+      {
+        "label": "예상 압박 질문 및 답변 (12문항)",
+        "type": "docx",
+        "file": "예상질문_답변.docx"
+      }
+    ]
+  }
+]

@@ -1,0 +1,151 @@
+{
+  "status": "warning",
+  "timestamp": "2026-03-30T15:00:00+09:00",
+  "score": 88,
+  "summary": "구글폼 13항목 + PPT + 발표대본 + 예상질문 모두 생성 완료. 내용 품질 양호하나, result.json 타입 표기 오류 및 preview_images 누락, presigned URL 만료 등 파일 메타데이터 수준의 경미한 문제 존재.",
+  "checks": [
+    {
+      "category": "기본 요건",
+      "item": "제출 형식 일치 (PPT + 구글폼)",
+      "status": "pass",
+      "detail": "PPT: Canva로 생성, canva_edit_url·pptx_download_url 존재. 구글폼: 13개 항목 전부 응답 작성 완료 (구글폼_응답.docx)."
+    },
+    {
+      "category": "기본 요건",
+      "item": "구글폼 항목 빠짐없이 응답",
+      "status": "pass",
+      "detail": "이미지(IMG_7032~7035)에서 확인한 13개 폼 항목(학번이름, 공연명, 기획의도, 공연컨셉, 관객연령대, 타깃관객특징, 러닝타임, 장소, 프로그램구성, 예산계획, 마케팅전략, 후원기업, 기대효과) 모두 result.md에 응답 포함."
+    },
+    {
+      "category": "기본 요건",
+      "item": "기획의도 분량 (3~5문장)",
+      "status": "pass",
+      "detail": "기획의도 응답 3문장. '3~5문장 이내, 핵심이 전달되도록 간략하고 명료하게' 조건 충족."
+    },
+    {
+      "category": "기본 요건",
+      "item": "공연 컨셉 (한 문장)",
+      "status": "pass",
+      "detail": "한 문장으로 작성됨."
+    },
+    {
+      "category": "기본 요건",
+      "item": "발표 대본 슬라이드별 구분",
+      "status": "pass",
+      "detail": "9개 슬라이드별 [슬라이드 N — 제목] 형식으로 문단 구분. 예산/후원/마케팅 슬라이드 내용도 빠짐없이 포함."
+    },
+    {
+      "category": "기본 요건",
+      "item": "예상 압박 질문 준비",
+      "status": "pass",
+      "detail": "예상질문_답변.docx(41,790B) 별도 생성. 12문항 포함."
+    },
+    {
+      "category": "기본 요건",
+      "item": "진로 연계 (구글폼 유의사항)",
+      "status": "pass",
+      "detail": "IMG_7032 '진로와 연계하여 문화 예술 공연 기획하기' 조건 충족. 화학공학 → 불꽃 반응 → 음악 동기화라는 일관된 논리."
+    },
+    {
+      "category": "기본 요건",
+      "item": "후원사 반영",
+      "status": "pass",
+      "detail": "요청사항에 명시된 삼성 뮤직 펠로우십, 한화재단 모두 포함. 추가로 천안시 문화재단도 포함."
+    },
+    {
+      "category": "내용 품질",
+      "item": "AI 문체 검증",
+      "status": "pass",
+      "detail": "'수 있' 표현 6회(104줄 대비 적절). '단순히', '도구적', '시사한다', '보여준다' 등 금지 표현 미사용. '~에 관심이 있는 나로서는' 등 진로 앞세우기 표현 없음."
+    },
+    {
+      "category": "내용 품질",
+      "item": "진로-내용 연결 자연스러움",
+      "status": "pass",
+      "detail": "화학공학 → 금속 이온 불꽃 반응 → 빛의 파장/공기 진동 유사성 → 과학+예술 융합 공연. 서사적 흐름으로 연결되어 자연스러움."
+    },
+    {
+      "category": "내용 품질",
+      "item": "프로그램 구성 완성도",
+      "status": "pass",
+      "detail": "5개 섹션별 곡명·원소·불꽃 색·감정 흐름이 논리적으로 매칭(고요→고조→절정→해방). 기획 의도를 잘 반영."
+    },
+    {
+      "category": "내용 품질",
+      "item": "예산 계획 구체성",
+      "status": "pass",
+      "detail": "총 1,900만원, 6개 항목별 금액·근거 제시(1인당 단가, 보험, 장비 내역 등). 압박 질문 대비 가능 수준."
+    },
+    {
+      "category": "내용 품질",
+      "item": "발표 분량 적절성 (5분)",
+      "status": "pass",
+      "detail": "9개 슬라이드 대본 합산 약 2,500자. 분당 ~500자 말하기 속도 기준 5분에 적합."
+    },
+    {
+      "category": "내용 품질",
+      "item": "소제목/번호 매기기 남용",
+      "status": "pass",
+      "detail": "구글폼 항목 번호는 양식 요구에 의한 것. 발표 대본은 슬라이드 구분만 사용. 불필요한 소제목/번호 없음."
+    },
+    {
+      "category": "사실 관계",
+      "item": "학년·학교 정보",
+      "status": "pass",
+      "detail": "3학년, 불당고, 31209 남수민 — CLAUDE.md 파싱 값과 일치."
+    },
+    {
+      "category": "사실 관계",
+      "item": "후원사 실존 여부",
+      "status": "pass",
+      "detail": "한화재단(서울세계불꽃축제 주관 — 실존), 삼성 뮤직 펠로우십(삼성문화재단 산하 — 실존), 천안시 문화재단(실존)."
+    },
+    {
+      "category": "사실 관계",
+      "item": "클래식 곡명 정확성",
+      "status": "pass",
+      "detail": "홀스트 행성 中 목성, 드뷔시 달빛, 사티 짐노페디 1번, 비발디 사계 中 여름, 베토벤 운명·환희의 송가 — 모두 실존 곡."
+    },
+    {
+      "category": "사실 관계",
+      "item": "불꽃 반응 색 정확성",
+      "status": "pass",
+      "detail": "Na(황금빛), Li(빨강), Cu(초록), K(보라), Ca(주황), Cs(청색), Mg(흰색), Fe(금색) — 화학 교과서 기준 정확."
+    },
+    {
+      "category": "파일 무결성",
+      "item": "docx 파일 존재 및 크기",
+      "status": "pass",
+      "detail": "구글폼_응답.docx(40,869B), 발표대본.docx(40,070B), 예상질문_답변.docx(41,790B) 모두 존재, 크기 > 0."
+    },
+    {
+      "category": "파일 무결성",
+      "item": "Canva URL 존재",
+      "status": "pass",
+      "detail": "canva_edit_url, canva_view_url, pptx_download_url 모두 result.json에 기록됨."
+    },
+    {
+      "category": "파일 무결성",
+      "item": "pptx_download_url 유효성",
+      "status": "warning",
+      "detail": "S3 presigned URL(X-Amz-Expires=7183초 ≈ 2시간). 2026-03-29 생성 기준 현재(03-30) 이미 만료. 다운로드 시 Canva export-design 재실행 필요."
+    },
+    {
+      "category": "파일 무결성",
+      "item": "preview_images 완전성",
+      "status": "warning",
+      "detail": "preview_images 5개 URL이나 발표 대본은 슬라이드 9개. 4개 슬라이드 미리보기 누락."
+    },
+    {
+      "category": "파일 무결성",
+      "item": "result.json 구글폼 type 표기",
+      "status": "warning",
+      "detail": "구글폼 응답의 type이 'docx'로 되어 있으나, result.json 규정상 구글폼 응답은 type: 'form'이어야 함. 기능상 문제는 없음."
+    }
+  ],
+  "recommendations": [
+    "pptx_download_url이 만료됨 — Canva export-design 재실행하여 새 URL 발급 필요",
+    "preview_images를 9개 슬라이드 전체로 재생성할 것 (현재 5개만 존재)",
+    "result.json의 구글폼 항목 type을 'form'으로 수정 권장 (규정 준수)"
+  ]
+}
