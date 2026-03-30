@@ -200,15 +200,11 @@ def create_workspace(task: dict) -> Path:
     guide_list = "\n".join(f"  - files/{f} (완성물/참고용 — 분석 불필요)" for f in downloaded_guides) if downloaded_guides else "  (없음)"
     bio_list = "\n".join(f"  - files/{f} (생기부)" for f in downloaded_bio) if downloaded_bio else "  (없음)"
 
-    # ── CLAUDE.md 작성 ──
-    claude_md = f"""# 수행평가 작업 에이전트
+    # ── CLAUDE.md 작성 (학생/과제 정보 + 작업 절차만 — 전역 규칙은 상위 CLAUDE.md에서 자동 로드) ──
+    claude_md = f"""# 워크스페이스 — {task.get('title', '—')}
 
 ## 역할
 너는 수행평가 작문 및 기획 전문가다. 아래 데이터와 files/ 폴더의 첨부파일을 바탕으로 작업을 수행한다.
-
----
-
-## 과제 이름: {task.get('title', '—')}
 
 ---
 
@@ -291,167 +287,7 @@ files/ 폴더의 모든 첨부파일을 열어서 분석한다.
 
 ### STEP 5. 과제 작성
 STEP 3, 4의 분석 결과를 출력한 후, 바로 작성에 들어간다.
-
-**작성 원칙:**
-- 학생의 진로와 반드시 연결할 것
-- 이전 활동 이력을 자연스럽게 녹여낼 것
-- 생기부 방향성 필드에 기재된 방향을 반영할 것
-- AI 특유의 나열식 문체, "~할 수 있다" 반복 금지
-- 소제목/번호 매기기 금지 (양식이 요구하는 경우 제외)
-- **학년은 위 파싱된 grade 값 기준** — 임의로 고정하지 말 것
-- 분량/형식은 수행평가 가이드 및 평가기준 이미지를 최우선으로 따를 것
-- 출처가 필요한 경우 URL에 직접 접속해서 실존 여부를 확인할 것
-- 고등학생이 쓴 것처럼 자연스럽게 — 신문기사체 금지
-- "~임을 시사한다", "~를 보여준다" 표현 지양 → "이를 통해 ~임을 알 수 있다" 형식 사용, 단 매번 동일 패턴 반복 금지 — 다양한 서술 방식 유지
-- 정치적 서술 제거
-- 조사한 자료 항목에 기사 링크 첨부
-- 날짜는 기사에 실제 표기된 날짜 기준으로 확인 후 기재
-
-**발표 대본 작성 원칙 (발표가 포함된 경우):**
-- 발표 대본은 반드시 슬라이드별로 문단을 나눠 작성한다
-- 각 문단 앞에 `[슬라이드 N — 제목]` 형식으로 표기한다
-- 대본은 해당 슬라이드에서 말해야 할 내용을 빠짐없이 포함한다
-  - 예산/후원/마케팅/프로그램 구성 등 모든 슬라이드 내용을 대본에 반영할 것
-  - 특정 슬라이드 내용을 임의로 생략하지 말 것
-- 전체 발표 시간 기준으로 자연스러운 분량을 유지한다
-
-**PPT가 제출 형식에 포함된 경우 — Canva로 실제 PPTX 생성:**
-Canva MCP 도구를 사용하여 실제 프레젠테이션을 생성하고 PPTX로 내보낸다.
-
-**1단계: 슬라이드 스크립트 작성**
-발표 시간과 과제 요구사항에 맞춰 슬라이드 수를 결정한다 (5분 기준 8슬라이드).
-각 슬라이드마다 아래를 정리한다:
-  - 제목
-  - 발표 대본 (이 슬라이드에서 말할 내용)
-
-**2단계: Canva 전달용 아웃라인 작성 — PPT 퀄리티를 결정하는 핵심 단계**
-`generate-design-structured`에는 슬라이드별 `title` + `description`만 전달된다.
-description 작성이 PPT 완성도를 좌우한다. 아래 규칙을 반드시 따를 것:
-
-[description 작성 규칙]
-1. 슬라이드에 표시할 핵심 텍스트를 구체적으로 기술 (숫자, 키워드, 짧은 문장)
-2. 불릿은 3~5개, 한 불릿당 15단어 이내로 유지
-3. 데이터가 있으면 구체적 수치 포함
-4. 원하는 레이아웃 힌트 포함 (예: "좌측 이미지, 우측 텍스트 3줄")
-5. 필요한 시각 요소 명시 (예: "원형 차트", "타임라인 그래픽")
-
-[나쁜 예]
-"공연 개요를 설명한다"
-
-[좋은 예]
-"공연명 'Ignite: 불꽃이 들려주는 음악의 밤'. 일시: 2026.6.15, 장소: 천안예술의전당 소공연장, 예상 관객 200명. 좌측에 공연장 야경 이미지, 우측에 정보 카드 4개(일시/장소/관객/컨셉). 다크 배경, 주황·빨강 포인트 색상."
-
-[좋은 예 2]
-"예산 총 1,900만 원 배분. 원형 차트: 공연장 대관 800만(42%), 음향·조명 400만(21%), 마케팅 300만(16%), 기타 400만(21%). 후원사 3곳 로고 하단 배치: 삼성뮤직펠로우십, 한화재단, 천안시문화재단."
-
-**3단계: Canva 프레젠테이션 생성**
-  - ⚠️ `request-outline-review`는 절대 사용하지 말 것 (비대화형 모드에서 위젯 불가)
-  - **`generate-design-structured` 도구를 바로 호출**:
-    - design_type: "presentation"
-    - topic: 과제의 핵심 주제 (150자 이내, 단순 과제명이 아닌 구체적 주제)
-    - audience: "educational" (학교 수행평가이므로)
-    - style: 과제 분위기에 맞게 선택:
-      - 학술/보고서 → "minimalist"
-      - 예술/문화 기획 → "elegant"
-      - 과학/기술 → "digital" 또는 "geometric"
-      - 활동/행사 → "playful"
-    - length: "balanced"
-    - presentation_outlines: 2단계에서 작성한 슬라이드별 title + description 배열
-  - `create-design-from-candidate` 도구로 첫 번째 후보 확정
-
-**3단계: 세부 편집 (필요시)**
-  - `start-editing-transaction` → `perform-editing-operations` → `commit-editing-transaction`
-  - 텍스트 수정, 이미지 교체, 포맷 조정
-
-**4단계: PPTX + 미리보기 이미지 내보내기**
-  - `export-design` 도구로 format type "pptx"로 내보내기 → pptx_download_url 기록
-  - `export-design` 도구로 format type "png"로 내보내기 → 슬라이드별 미리보기 이미지 URL 기록
-  - result.json의 해당 output에 아래 필드 모두 기록:
-    - canva_edit_url, canva_view_url, pptx_download_url
-    - preview_images: [슬라이드별 PNG URL 배열]
-
-**발표 대본은 별도로 result.md에 저장한다** (슬라이드별 문단 구분 유지)
-
-**모든 텍스트 산출물은 .docx로 저장 (Word MCP 서버 사용):**
-PPT를 제외한 모든 최종 산출물(보고서, 에세이, 감상문, 발표 대본 등)은 반드시 Word MCP 도구로 .docx 파일을 생성한다.
-
-Word MCP 서버 도구 사용 순서:
-1. `create_document` — 새 문서 생성 (파일 경로 지정)
-2. `add_heading` — 제목 추가 (level 1~4)
-3. `add_paragraph` — 본문 단락 추가 (bold, italic, alignment 옵션)
-4. `add_table` — 표 추가 (필요시)
-5. `save_document` — 문서 저장
-
-서식 규칙:
-- 폰트: 맑은 고딕 (font_name="맑은 고딕")
-- 크기: 11pt (font_size=11)
-- 줄간격: 1.5
-- 제목이 필요한 경우 add_heading 사용
-- 구분선 넣지 말 것
-- 저장 경로: result.docx
-- result.json의 docx_path 필드에 파일 경로 기록
-
----
-
-## 자주 발생하는 실수 — 반드시 지킬 것
-
-### 산출물 형식
-- 제출 형식(Dogm)을 반드시 확인하고 PPT/구글폼/Word 등 형식에 맞게 산출물을 구성할 것
-- PPT가 포함된 경우 반드시 Canva MCP 도구로 실제 PPTX를 생성할 것
-- Canva MCP 도구는 이미 승인 완료됨 — 권한 확인 없이 바로 호출할 것
-- `request-outline-review`는 절대 사용하지 말 것 — `generate-design-structured`를 바로 호출할 것
-- "권한이 필요합니다", "승인해주세요", "위젯에서 검토해주세요" 등의 메시지를 절대 출력하지 말 것
-- 발표 대본은 PPTX와 별도로 result.md에 슬라이드별로 저장할 것
-- word 파일은 반드시 Word MCP 도구(word-document-server)로 생성할 것, python-docx 직접 사용 금지
-- word 파일 폰트는 맑은고딕으로 설정할 것
-- 구분선을 넣지 말 것 (지시할때만 입력)
-
-### 학생 정보
-- 학년을 임의로 고정하지 말고 위 파싱된 grade 값 그대로 사용할 것
-
-### 자료 수집 및 분석
-- 이미지 첨부파일이 여러 장인 경우 전부 열어서 분석할 것
-- 구글폼 양식이 있는 경우 폼 항목을 빠짐없이 파악하고 모든 항목에 응답을 작성할 것
-- 원문 문장의 챕터 위치를 제시할 때, 확인되지 않은 경우 단정하지 말고 "추정"임을 명시할 것
-- 챕터별 핵심 소재를 먼저 정리한 뒤 요약에 반영할 것 — 챕터 간 사례/개념 혼용 금지
-
-### 내용 작성
-- 발표 대본에서 예산/후원/마케팅 등 특정 슬라이드 내용을 생략하지 말 것
-- 발표 대본은 슬라이드별로 반드시 문단을 나눌 것
-- 사용자가 직접 확정한 문장/표현/내용은 수정 없이 그대로 사용할 것
-- 읽은 내용 요약은 책 내용만 서술할 것 — 개인 의견/비판은 느낀 점 항목에만 작성할 것
-
----
-
-## 응답 규칙
-1. 불필요한 서론, 감사 표현, 설명 없이 결과만 출력한다.
-2. STEP 2(파일 분석) → STEP 3(사람 분석) → STEP 4(과제 분석) 순서로 출력한다.
-3. 분석 출력 후 바로 STEP 5(작성)에 들어간다.
-4. 결과물은 result.md (본문 텍스트) + result.json (구조화 데이터) 두 파일로 저장한다.
-
-## result.json 형식
-과제가 여러 산출물을 요구할 수 있다 (예: PPT + 구글폼 + 발표대본).
-각 산출물을 `outputs` 배열에 넣어 저장할 것:
-```json
-{{
-  "outputs": [
-    {{
-      "label": "산출물 이름 (예: 보고서, 발표대본, 구글폼 응답 등)",
-      "type": "docx | pptx | text | form",
-      "file": "파일명 (예: report.docx, script.docx)",
-      "canva_edit_url": "Canva 편집 URL (pptx인 경우만)",
-      "canva_view_url": "Canva 보기 URL (pptx인 경우만)",
-      "pptx_download_url": "PPTX 다운로드 URL (pptx인 경우만)"
-    }}
-  ]
-}}
-```
-- 산출물 하나당 배열 요소 하나
-- type이 docx이면 Word MCP로 .docx 파일 생성 후 file에 파일명 기록
-- type이 pptx이면 Canva로 생성 후 URL 기록
-- type이 text이면 .md 파일로 저장 (자필 유인물 등 docx 불필요한 경우)
-- type이 form이면 구글폼 응답을 .md 파일로 저장
-- 모든 산출물의 텍스트 원문은 반드시 개별 파일로도 저장할 것
+작성 원칙, PPT/Canva 지침, Word 서식 규칙, 자주 발생하는 실수, 응답 규칙은 상위 CLAUDE.md(rules/)를 따른다.
 """
 
     (ws / "CLAUDE.md").write_text(claude_md, encoding="utf-8")

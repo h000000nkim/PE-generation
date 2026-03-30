@@ -220,11 +220,15 @@ function updateActionBar() {
   document.getElementById('unlockBtn').disabled = n === 0 || currentTab !== 'locked';
 }
 
+function sortByApplyDate(arr) {
+  return arr.sort((a, b) => (a.apply_date || '9999') .localeCompare(b.apply_date || '9999'));
+}
+
 function renderTasks(tasks) {
   allTasks = tasks;
-  const todo = tasks.filter(t => !isDone(t.status) && !t.locked);
-  const done = tasks.filter(t => isDone(t.status) && !t.locked);
-  const locked = tasks.filter(t => t.locked);
+  const todo = sortByApplyDate(tasks.filter(t => !isDone(t.status) && !t.locked));
+  const done = sortByApplyDate(tasks.filter(t => isDone(t.status) && !t.locked));
+  const locked = sortByApplyDate(tasks.filter(t => t.locked));
 
   document.getElementById('count-todo').textContent = todo.length;
   document.getElementById('count-done').textContent = done.length;

@@ -464,6 +464,7 @@ def _fetch_my_tasks_blocking() -> list:
                 "status":      _get_text(props, "owtr"),
                 "activity":    _get_text(props, "CrVV"),
                 "submit_type": _get_text(props, "Dogm"),
+                "apply_date":  _get_date(props, "MmFA"),
                 "link": f"https://www.notion.so/{bid.replace('-', '')}",
             })
 
