@@ -312,12 +312,12 @@ async function moveToLock() {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ block_ids: ids })
   });
+  selectedIds.clear();
+  await loadTasks(false);
+  switchTab('locked');
   const info = document.getElementById('selectInfo');
   info.textContent = `${ids.length}개 잠금으로 이동 완료`;
   info.style.color = '#166534';
-  selectedIds.clear();
-  loadTasks(false);
-  setTimeout(() => updateActionBar(), 3000);
 }
 
 async function moveToUnlock() {
@@ -327,12 +327,12 @@ async function moveToUnlock() {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ block_ids: ids })
   });
+  selectedIds.clear();
+  await loadTasks(false);
+  switchTab('done');
   const info = document.getElementById('selectInfo');
   info.textContent = `${ids.length}개 완료로 이동 완료`;
   info.style.color = '#166534';
-  selectedIds.clear();
-  loadTasks(false);
-  setTimeout(() => updateActionBar(), 3000);
 }
 
 loadTasks();

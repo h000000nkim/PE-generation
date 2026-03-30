@@ -470,13 +470,36 @@ def _fetch_my_tasks_blocking() -> list:
     return tasks
 
 
+def _do_fetch_and_cache() -> list:
+    """Notion에서 실제로 fetch 후 캐시에 저장"""
+    global _my_tasks_cache
+    _my_tasks_cache["loading"] = True
+    try:
+        tasks = _fetch_my_tasks_blocking()
+        _my_tasks_cache["tasks"] = tasks
+        _my_tasks_cache["ts"]    = time.time()
+        os.makedirs(os.path.dirname(_CACHE_FILE), exist_ok=True)
+        with open(_CACHE_FILE, "w", encoding="utf-8") as f:
+            _json.dump({"tasks": tasks, "ts": _my_tasks_cache["ts"]}, f, ensure_ascii=False)
+        return tasks
+    except Exception:
+        return _my_tasks_cache.get("tasks") or []
+    finally:
+        _my_tasks_cache["loading"] = False
+
+
 def get_my_tasks(force: bool = False) -> dict:
     """캐시된 내 과업 목록 반환. {'status': 'ok'|'loading', 'tasks': [...]}"""
     global _my_tasks_cache
     now = time.time()
 
+    # force=True: 동기로 즉시 재조회
+    if force:
+        tasks = _do_fetch_and_cache()
+        return {"status": "ok", "tasks": tasks}
+
     # 캐시 유효
-    if not force and _my_tasks_cache["tasks"] is not None:
+    if _my_tasks_cache["tasks"] is not None:
         if now - _my_tasks_cache["ts"] < MY_TASKS_TTL:
             return {"status": "ok", "tasks": _my_tasks_cache["tasks"]}
 
@@ -487,27 +510,10 @@ def get_my_tasks(force: bool = False) -> dict:
             return {"status": "ok", "tasks": cached}
         return {"status": "loading", "tasks": []}
 
-    # 백그라운드 스레드에서 갱신
+    # 백그라운드 스레드에서 갱신 (일반 TTL 만료 시)
     import threading
-    def _run():
-        global _my_tasks_cache
-        _my_tasks_cache["loading"] = True
-        try:
-            tasks = _fetch_my_tasks_blocking()
-            _my_tasks_cache["tasks"] = tasks
-            _my_tasks_cache["ts"]    = time.time()
-            # 디스크에 저장
-            os.makedirs(os.path.dirname(_CACHE_FILE), exist_ok=True)
-            with open(_CACHE_FILE, "w", encoding="utf-8") as f:
-                _json.dump({"tasks": tasks, "ts": _my_tasks_cache["ts"]}, f, ensure_ascii=False)
-        except Exception:
-            pass
-        finally:
-            _my_tasks_cache["loading"] = False
+    threading.Thread(target=_do_fetch_and_cache, daemon=True).start()
 
-    threading.Thread(target=_run, daemon=True).start()
-
-    # 기존 캐시가 있으면 바로 반환, 없으면 로딩 중
     if _my_tasks_cache["tasks"] is not None:
         return {"status": "ok", "tasks": _my_tasks_cache["tasks"]}
     return {"status": "loading", "tasks": []}
