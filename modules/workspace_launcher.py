@@ -8,9 +8,12 @@
 import os
 import re
 import json
+import logging
 import subprocess
 import requests
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent / "workspaces"
 LOCKED_FILE = BASE_DIR / ".locked_tasks.json"
@@ -178,7 +181,7 @@ def create_workspace(task: dict) -> Path:
                     )
                 doc.close()
         except Exception as e:
-            print(f"[workspace] 텍스트 추출 실패 ({fname}): {e}")
+            logger.warning(f"[workspace] 텍스트 추출 실패 ({fname}): {e}")
 
     # ── 과거 과제 이력 정리 (코드 자동화) ──
     past_tasks_text = ""
@@ -336,6 +339,20 @@ def get_analysis(block_id: str) -> dict | None:
     if analysis_file.exists():
         return json.loads(analysis_file.read_text(encoding="utf-8"))
     return None
+
+
+def delete_analysis(block_id: str) -> bool:
+    """사전분석 결과 삭제 (analysis.json + analysis.md)"""
+    ws = get_workspace_path(block_id)
+    if not ws:
+        return False
+    deleted = False
+    for fname in ("analysis.json", "analysis.md"):
+        f = ws / fname
+        if f.exists():
+            f.unlink()
+            deleted = True
+    return deleted
 
 
 def _save_memo_log(block_id: str, action: str, memo: str):
@@ -579,11 +596,40 @@ def launch_revision(task: dict, revision_memo: str) -> bool:
 
 # 실행 중인 프로세스 추적: block_id → [job, job, ...] (다중 작업 지원)
 import time as _time
+import threading as _threading_mod
+
 _running_jobs: dict[str, list] = {}
+_jobs_lock = _threading_mod.Lock()
+
+
+def _kill_same_label_jobs(block_id: str, label: str):
+    """같은 과제의 같은 작업 유형(label) 중 실행 중인 프로세스를 종료한다.
+    다른 유형의 작업(예: 수정과 분석)은 병렬로 유지된다."""
+    with _jobs_lock:
+        jobs = _running_jobs.get(block_id, [])
+        for job in jobs:
+            if job["label"] == label and job["status"] == "running":
+                proc = job.get("process")
+                if proc:
+                    try:
+                        proc.terminate()
+                        proc.wait(timeout=5)
+                    except Exception:
+                        try:
+                            proc.kill()
+                        except Exception:
+                            pass
+                    job["status"] = "cancelled"
+                    job["end_time"] = _time.time()
+                    logger.info(f"[background] 기존 {label} 작업 종료 (pid={job['pid']}, block={block_id})")
 
 
 def launch_background(workspace_path: Path, instruction: str, block_id: str, label: str = "작업") -> bool:
-    """Claude Code를 백그라운드 프로세스로 실행 (-p 모드)"""
+    """Claude Code를 백그라운드 프로세스로 실행 (-p 모드).
+    같은 과제 + 같은 작업 유형이 이미 실행 중이면 기존 세션을 종료하고 새로 시작한다."""
+    # 같은 label의 기존 작업 종료 (다른 label은 유지 → 병렬 허용)
+    _kill_same_label_jobs(block_id, label)
+
     ws = str(workspace_path)
 
     # 작업별 고유 파일 (덮어쓰기 방지)
@@ -594,16 +640,21 @@ def launch_background(workspace_path: Path, instruction: str, block_id: str, lab
     output_file = workspace_path / f".output_{job_id}.txt"
     error_file = workspace_path / f".error_{job_id}.txt"
 
+    stdin_f = stdout_f = stderr_f = None
     try:
+        stdin_f = open(prompt_file, "r")
+        stdout_f = open(output_file, "w")
+        stderr_f = open(error_file, "w")
+
         proc = subprocess.Popen(
             [
                 "claude", "-p",
                 "--output-format", "text",
                 "--permission-mode", "bypassPermissions",
             ],
-            stdin=open(prompt_file, "r"),
-            stdout=open(output_file, "w"),
-            stderr=open(error_file, "w"),
+            stdin=stdin_f,
+            stdout=stdout_f,
+            stderr=stderr_f,
             cwd=ws,
         )
 
@@ -620,14 +671,23 @@ def launch_background(workspace_path: Path, instruction: str, block_id: str, lab
             "warning": None,
         }
 
-        if block_id not in _running_jobs:
-            _running_jobs[block_id] = []
-        _running_jobs[block_id].append(job)
+        with _jobs_lock:
+            if block_id not in _running_jobs:
+                _running_jobs[block_id] = []
+            _running_jobs[block_id].append(job)
 
         # 백그라운드 스레드에서 완료 감시 + 문제 감지 + 임시파일 정리
         import threading
         def _watch():
-            proc.wait()
+            try:
+                proc.wait()
+            finally:
+                # Popen 후 파일 핸들을 스레드에서 안전하게 닫기
+                for fh in (stdin_f, stdout_f, stderr_f):
+                    try:
+                        fh.close()
+                    except Exception:
+                        pass
             job["status"] = "complete" if proc.returncode == 0 else "error"
             job["end_time"] = _time.time()
             job["returncode"] = proc.returncode
@@ -647,7 +707,14 @@ def launch_background(workspace_path: Path, instruction: str, block_id: str, lab
         return True
 
     except Exception as e:
-        print(f"[background] 실행 실패: {e}")
+        # 예외 시 파일 핸들 정리 + 프로세스 종료
+        for fh in (stdin_f, stdout_f, stderr_f):
+            if fh:
+                try:
+                    fh.close()
+                except Exception:
+                    pass
+        logger.error(f"[background] 실행 실패: {e}")
         return False
 
 
@@ -722,30 +789,31 @@ def _detect_issues(output_file: Path, error_file: Path) -> str | None:
 
 def get_job_status(block_id: str) -> dict | None:
     """실행 중인 작업 상태 조회 — 모든 활성 작업 반환"""
-    jobs = _running_jobs.get(block_id, [])
-    if not jobs:
-        return None
+    with _jobs_lock:
+        jobs = _running_jobs.get(block_id, [])
+        if not jobs:
+            return None
 
-    active = []
-    warnings = []
-    for j in jobs:
-        elapsed = _time.time() - j["start_time"]
-        active.append({
-            "job_id": j["job_id"],
-            "status": j["status"],
-            "label": j["label"],
-            "elapsed_seconds": int(elapsed),
-            "pid": j["pid"],
-            "warning": j.get("warning"),
-        })
-        if j.get("warning"):
-            warnings.append(j["warning"])
+        active = []
+        warnings = []
+        for j in jobs:
+            elapsed = _time.time() - j["start_time"]
+            active.append({
+                "job_id": j["job_id"],
+                "status": j["status"],
+                "label": j["label"],
+                "elapsed_seconds": int(elapsed),
+                "pid": j["pid"],
+                "warning": j.get("warning"),
+            })
+            if j.get("warning"):
+                warnings.append(j["warning"])
 
-    # 완료된 지 5분 지난 작업 정리
-    _running_jobs[block_id] = [
-        j for j in jobs
-        if j["status"] == "running" or _time.time() - j.get("end_time", _time.time()) < 300
-    ]
+        # 완료된 지 5분 지난 작업 정리
+        _running_jobs[block_id] = [
+            j for j in jobs
+            if j["status"] == "running" or _time.time() - j.get("end_time", _time.time()) < 300
+        ]
 
     warning_text = " · ".join(set(warnings)) if warnings else None
 
