@@ -1,0 +1,14 @@
+{
+  "outputs": [
+    {
+      "label": "수행평가 원고",
+      "type": "docx",
+      "file": "result.docx"
+    },
+    {
+      "label": "수행평가 원고 (텍스트)",
+      "type": "text",
+      "file": "result.md"
+    }
+  ]
+}

@@ -212,9 +212,15 @@
 
 <div class="container">
 
-  <header>
-    <a href="/" class="back">← 목록으로</a>
-    <h1>{{ task.title }}</h1>
+  <header style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div>
+      <a href="/" class="back">← 목록으로</a>
+      <h1>{{ task.title }}</h1>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <a href="https://www.notion.so/{{ task.block_id | replace('-','') }}" target="_blank" style="padding:6px 14px;font-size:0.8rem;border:1px solid #d1d5db;border-radius:6px;background:white;color:#555;font-weight:600;text-decoration:none">Notion ↗</a>
+      <button onclick="location.reload()" style="padding:6px 14px;font-size:0.8rem;border:1px solid #d1d5db;border-radius:6px;background:white;cursor:pointer;color:#555;font-weight:600">↻ 새로고침</button>
+    </div>
   </header>
 
   <div class="two-col">
@@ -296,8 +302,8 @@
               {% for f in task.bio_files %}
               <li>
                 <span class="file-icon">📄</span>
-                {% if f.url %}<a href="#" class="file-preview-link" data-url="{{ f.url }}" data-name="{{ f.name }}">{{ f.name }}</a>
-                {% else %}{{ f.name }}{% endif %}
+                <a href="#" class="file-preview-link" data-url="/api/download/{{ task.block_id }}/files/{{ f.name }}" data-name="{{ f.name }}">{{ f.name }}</a>
+                <a href="/api/download/{{ task.block_id }}/files/{{ f.name }}" download style="font-size:0.7rem;color:#888;margin-left:6px">↓</a>
               </li>
               {% endfor %}
             </ul>
@@ -394,8 +400,8 @@
         {% for f in task.attachments %}
         <li>
           <span class="file-icon">📎</span>
-          {% if f.url %}<a href="#" class="file-preview-link" data-url="{{ f.url }}" data-name="{{ f.name }}">{{ f.name }}</a>
-          {% else %}{{ f.name }}{% endif %}
+          <a href="#" class="file-preview-link" data-url="/api/download/{{ task.block_id }}/files/{{ f.name }}" data-name="{{ f.name }}">{{ f.name }}</a>
+          <a href="/api/download/{{ task.block_id }}/files/{{ f.name }}" download style="font-size:0.7rem;color:#888;margin-left:6px">↓</a>
         </li>
         {% endfor %}
       </ul>
@@ -406,8 +412,8 @@
         {% for f in task.guide_files %}
         <li>
           <span class="file-icon">📋</span>
-          {% if f.url %}<a href="#" class="file-preview-link" data-url="{{ f.url }}" data-name="{{ f.name }}">{{ f.name }}</a>
-          {% else %}{{ f.name }}{% endif %}
+          <a href="#" class="file-preview-link" data-url="/api/download/{{ task.block_id }}/files/{{ f.name }}" data-name="{{ f.name }}">{{ f.name }}</a>
+          <a href="/api/download/{{ task.block_id }}/files/{{ f.name }}" download style="font-size:0.7rem;color:#888;margin-left:6px">↓</a>
         </li>
         {% endfor %}
       </ul>
@@ -449,14 +455,6 @@
     </div>
     {% endif %}
 
-    <!-- ⑦ 내 아이디어 메모 -->
-    {% if not locked %}
-    <div class="card full">
-      <span class="section-label memo">내 아이디어 메모</span>
-      <textarea id="memo" placeholder="주제, 방향, 포함할 내용 등 자유롭게 메모하세요..." rows="4"></textarea>
-    </div>
-    {% endif %}
-
       <!-- ⑧ 사전분석 결과 (STEP 3+4) -->
     <div id="analysis-section" class="card full hidden">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -467,6 +465,20 @@
       </div>
       <pre id="analysis-body"></pre>
       <div id="analysis-cost"></div>
+      {% if not locked %}
+      <div style="margin-top:12px;border-top:1px solid #e5e5e5;padding-top:10px">
+        <textarea id="analysis-revise-memo" placeholder="보충할 내용 (못 읽은 파일, 추가 정보, 수정 요청 등)..." rows="2"
+                  style="width:100%;box-sizing:border-box;border:1px solid #e0e0e0;border-radius:6px;padding:8px;font-size:0.82rem;font-family:inherit;resize:vertical"></textarea>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+          <label style="display:flex;align-items:center;gap:4px;padding:5px 10px;border:1px dashed #d1d5db;border-radius:6px;cursor:pointer;font-size:0.75rem;color:#666">
+            <span>📎 파일</span>
+            <input type="file" id="analysis-revise-files" multiple style="display:none" onchange="updateAnalysisFileLabel(this)">
+          </label>
+          <span id="analysis-revise-file-info" style="font-size:0.7rem;color:#888"></span>
+          <button onclick="reviseAnalysis()" id="analysisReviseBtn" style="margin-left:auto;padding:6px 14px;font-size:0.8rem;border:none;border-radius:6px;background:#f97316;color:white;cursor:pointer;font-weight:600">사전분석 재실행</button>
+        </div>
+      </div>
+      {% endif %}
     </div>
 
   </div>
@@ -481,11 +493,16 @@
     <button class="btn-primary" id="checkResultBtn" onclick="checkResult()" style="background:#ef4444">산출물 확인 ↻</button>
   </div>
   {% else %}
+  <!-- 초안 작성 지시 메모 -->
+  <div class="card full" style="margin-top:20px">
+    <span class="section-label memo">초안 작성 지시</span>
+    <textarea id="memo" placeholder="주제, 방향, 포함할 내용, 주의사항 등..." rows="3"
+              style="width:100%;box-sizing:border-box;border:1px solid #e0e0e0;border-radius:8px;padding:10px;font-size:0.85rem;font-family:inherit;resize:vertical"></textarea>
+  </div>
   <div class="action-bar">
     <button class="btn-primary" id="analyzeBtn" onclick="runAnalysis()" style="background:#f97316">사전분석 실행</button>
     <button class="btn-primary" id="launchBtn" onclick="launchClaudeCode()" style="background:#3b82f6;opacity:0.4">초안 작성 →</button>
     <button class="btn-primary" id="checkResultBtn" onclick="checkResult()" style="background:#ef4444">산출물 확인 ↻</button>
-    <button class="btn-primary" id="verifyBtn" onclick="runVerification()" style="background:#7c3aed">검증 실행</button>
   </div>
   {% endif %}
 
@@ -523,7 +540,14 @@
     <div style="margin-bottom:16px;border-top:1px solid #e5e5e5;padding-top:12px">
       <textarea id="revision-memo" placeholder="수정할 내용을 입력하세요..." rows="2"
                 style="width:100%;box-sizing:border-box;border:1px solid #e0e0e0;border-radius:8px;padding:10px;font-size:0.85rem;font-family:inherit;resize:vertical"></textarea>
-      <button class="btn-primary" id="reviseBtn" onclick="requestRevision()" style="background:#8b5cf6;margin-top:6px;padding:8px 16px;font-size:0.85rem">수정 요청 →</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+        <label style="display:flex;align-items:center;gap:4px;padding:6px 12px;border:1px dashed #d1d5db;border-radius:6px;cursor:pointer;font-size:0.78rem;color:#666">
+          <span>📎 파일 첨부</span>
+          <input type="file" id="revision-files" multiple style="display:none" onchange="updateFileLabel(this)">
+        </label>
+        <span id="revision-file-info" style="font-size:0.72rem;color:#888"></span>
+        <button class="btn-primary" id="reviseBtn" onclick="requestRevision()" style="background:#8b5cf6;padding:8px 16px;font-size:0.85rem;margin-left:auto">수정 요청 →</button>
+      </div>
     </div>
     {% endif %}
 
@@ -554,35 +578,41 @@
 const BLOCK_ID = "{{ task.block_id }}";
 const IS_LOCKED = {{ 'true' if locked else 'false' }};
 
-// 페이지 로드 시 캐싱된 사전분석 확인 + 작업 상태 확인
+// 페이지 로드 시 통합 API로 한번에 로드
 (async function() {
   try {
-    const resp = await fetch(`/api/analysis/${BLOCK_ID}`);
+    const resp = await fetch(`/api/task-detail/${BLOCK_ID}`);
     if (resp.ok) {
       const data = await resp.json();
-      if (data.status === "ok") showAnalysis(data);
+      // 분석 결과
+      if (data.analysis) showAnalysis(data.analysis);
+      // 경고
+      if (data.warning && data.warning.status === "warning") {
+        showBanner('error', `${data.warning.label} — ${data.warning.warning} (${data.warning.timestamp})`);
+        if (data.warning.label === "사전분석") _lastAction = {type: 'analysis'};
+        else if (data.warning.label === "초안 작성") _lastAction = {type: 'draft'};
+        else if (data.warning.label === "수정") _lastAction = {type: 'revision'};
+      }
+      // 산출물 + 이력
+      let hasContent = false;
+      if (data.result) { renderOutputs(data.result); hasContent = true; }
+      if (data.memo_log && data.memo_log.length) { renderMemoLog(data.memo_log); hasContent = true; }
+      if (hasContent) document.getElementById("work-history").classList.remove("hidden");
+      // 작업 상태 즉시 반영
+      if (data.job_status && data.job_status.status === "running") {
+        const jobLines = (data.job_status.jobs || []).filter(j => j.status === 'running').map(j =>
+          `${j.label} ${formatElapsed(j.elapsed_seconds)}`
+        ).join(' · ');
+        showBanner('running', jobLines || `${data.job_status.label} 진행 중...`);
+      }
     }
   } catch(e) {}
-  // 미해결 경고 확인
-  try {
-    const resp = await fetch(`/api/warning/${BLOCK_ID}`);
-    const data = await resp.json();
-    if (data.status === "warning") {
-      showBanner('error', `${data.label} — ${data.warning} (${data.timestamp})`);
-      // 재시도를 위해 마지막 작업 타입 복원
-      if (data.label === "사전분석") _lastAction = {type: 'analysis'};
-      else if (data.label === "초안 작성") _lastAction = {type: 'draft'};
-      else if (data.label === "수정") _lastAction = {type: 'revision'};
-    }
-  } catch(e) {}
-  // 작업 상태 폴링 시작
   startPolling();
-  // 산출물 + 이력 + 검증 통합 로드
-  try { await loadWorkHistory(); } catch(e) {}
-  try { await loadVerification(); } catch(e) {}
 })();
 
 async function loadWorkHistory() {
+  // 스크롤 위치 보존
+  const scrollY = window.scrollY;
   // 산출물 + 이력을 한번에 로드
   let hasContent = false;
 
@@ -607,6 +637,8 @@ async function loadWorkHistory() {
   } catch(e) {}
 
   if (hasContent) document.getElementById("work-history").classList.remove("hidden");
+  // 스크롤 위치 복원
+  window.scrollTo(0, scrollY);
 }
 
 function renderOutputs(r) {
@@ -625,7 +657,7 @@ function renderOutputs(r) {
   statusEl.innerHTML = `산출물 ${outputs.length}개`;
   outputs.forEach((o, i) => {
     const label = o.label || `산출물 ${i+1}`;
-    const colors = {docx:'#2b579a', pptx:'#d24726', text:'#6b7280', form:'#10b981'};
+    const colors = {docx:'#2b579a', hwpx:'#0d7c66', pptx:'#d24726', text:'#6b7280', form:'#10b981'};
     const bg = colors[o.type] || '#888';
 
     if (o.type === "pptx") {
@@ -642,6 +674,8 @@ function renderOutputs(r) {
     } else if (o.type === "docx" && o.file) {
       preview.innerHTML += `<a class="output-link" style="background:${bg}" href="#" onclick="previewDocx('${o.file}','${label}');return false">${label}</a>`;
       download.innerHTML += `<a class="output-link" style="background:${bg}" href="/api/download/${BLOCK_ID}/${o.file}" target="_blank">${label}</a>`;
+    } else if (o.type === "hwpx" && o.file) {
+      download.innerHTML += `<a class="output-link" style="background:${bg}" href="/api/download/${BLOCK_ID}/${o.file}" target="_blank">${label} (.hwpx)</a>`;
     } else if (o.file && o.file.endsWith('.pdf')) {
       preview.innerHTML += `<a class="output-link" style="background:${bg}" href="#" onclick="previewPdf('${o.file}','${label}');return false">${label}</a>`;
       download.innerHTML += `<a class="output-link" style="background:${bg}" href="/api/download/${BLOCK_ID}/${o.file}" target="_blank">${label}</a>`;
@@ -658,12 +692,14 @@ function renderOutputs(r) {
 
 function renderMemoLog(logs) {
   const list = document.getElementById("memo-log-list");
+  const typeColors = {docx:'#2b579a', hwpx:'#0d7c66', pptx:'#d24726', text:'#6b7280', form:'#10b981'};
   const reversed = [...logs].reverse();
   list.innerHTML = reversed.map((l, ri) => {
     const origIdx = logs.length - 1 - ri;
     const num = logs.length - ri;
     const hasError = !!l.error;
     const hasResult = l.result_snapshot && l.result_snapshot.length;
+    const hasVerification = !!l.verification;
     const statusIcon = hasError ? '❌' : (hasResult ? '✅' : '⏳');
     const borderColor = hasError ? '#fca5a5' : '#f0f0f0';
 
@@ -674,13 +710,20 @@ function renderMemoLog(logs) {
         오류 발생: ${l.error}
       </div>`;
     }
+
+    // 변경된 파일 표시 (수정 요청인 경우)
+    if (l.changed_files && l.changed_files.length) {
+      detailHtml += `<div style="margin-top:8px;padding:6px 10px;background:#f0f9ff;border-radius:6px;border:1px solid #bae6fd;font-size:0.75rem;color:#0369a1">
+        변경 파일: ${l.changed_files.map(f => `<code style="background:#e0f2fe;padding:1px 4px;border-radius:3px">${f}</code>`).join(' ')}
+      </div>`;
+    }
+
     if (hasResult) {
       detailHtml += `<div style="margin-top:8px;display:flex;gap:12px">
         <div style="flex:1">
           <div style="font-size:0.68rem;color:#aaa;margin-bottom:3px">미리보기</div>
           ${l.result_snapshot.map(r => {
-            const colors = {docx:'#2b579a', pptx:'#d24726', text:'#6b7280', form:'#10b981'};
-            const bg = colors[r.type] || '#888';
+            const bg = typeColors[r.type] || '#888';
             if (r.file) {
               return `<a href="#" onclick="previewFile('/api/download/${BLOCK_ID}/${r.file}','${r.file}');return false" style="display:inline-block;font-size:0.68rem;padding:2px 6px;border-radius:4px;background:${bg};color:white;margin:1px;text-decoration:none">${r.label || r.type}</a>`;
             }
@@ -690,8 +733,7 @@ function renderMemoLog(logs) {
         <div style="flex:1">
           <div style="font-size:0.68rem;color:#aaa;margin-bottom:3px">다운로드</div>
           ${l.result_snapshot.filter(r => r.file || r.pptx_download_url).map(r => {
-            const colors = {docx:'#2b579a', pptx:'#d24726', text:'#6b7280', form:'#10b981'};
-            const bg = colors[r.type] || '#888';
+            const bg = typeColors[r.type] || '#888';
             const href = r.pptx_download_url || `/api/download/${BLOCK_ID}/${r.file}`;
             return `<a href="${href}" target="_blank" style="display:inline-block;font-size:0.68rem;padding:2px 6px;border-radius:4px;background:${bg};color:white;margin:1px;text-decoration:none">${r.label || r.type}</a>`;
           }).join('')}
@@ -699,12 +741,80 @@ function renderMemoLog(logs) {
       </div>`;
     }
 
-    const summaryBadges = hasResult
+    // 검증 결과 전체 표시 (이 지시에 대한 검증)
+    if (hasVerification) {
+      const v = l.verification;
+      const vIcon = v.status === 'pass' ? '✅' : v.status === 'fail' ? '❌' : '⚠️';
+      const vBg = v.status === 'pass' ? '#f0fdf4' : v.status === 'fail' ? '#fef2f2' : '#fffbeb';
+      const vColor = v.status === 'pass' ? '#166534' : v.status === 'fail' ? '#991b1b' : '#92400e';
+
+      // 요약 헤더
+      let vHtml = `<div style="margin-top:10px;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden">
+        <div style="padding:8px 12px;background:${vBg};display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="this.parentElement.querySelector('.v-detail').classList.toggle('hidden')">
+          <span style="font-size:0.8rem;font-weight:600;color:${vColor}">${vIcon} 검증: ${v.summary || v.status}${v.score != null ? ` (${v.score}/100)` : ''}</span>
+          <span style="font-size:0.65rem;color:#aaa">▼ 상세</span>
+        </div>
+        <div class="v-detail hidden" style="padding:8px 12px;font-size:0.75rem">`;
+
+      // 체크 항목 테이블 (pass가 아닌 항목에 체크박스)
+      if (v.checks && v.checks.length) {
+        vHtml += `<table style="width:100%;border-collapse:collapse;margin-bottom:8px">`;
+        v.checks.forEach((c, ci) => {
+          const icon = c.status === 'pass' ? '✅' : c.status === 'fail' ? '❌' : '⚠️';
+          const needsFix = c.status !== 'pass';
+          const cbId = `vcheck_${origIdx}_${ci}`;
+          const escapedDetail = (c.detail||'').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+          const escapedItem = (c.item||'').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+          vHtml += `<tr style="border-bottom:1px solid #f0f0f0">
+            <td style="padding:4px 6px;width:24px">${icon}</td>
+            <td style="padding:4px 6px;color:#888;white-space:nowrap">${c.category}</td>
+            <td style="padding:4px 6px;font-weight:600">${c.item}</td>
+            <td style="padding:4px 6px;color:#555">${c.detail}</td>
+            ${needsFix ? `<td style="padding:4px 6px;width:30px;text-align:center">
+              <input type="checkbox" id="${cbId}" style="cursor:pointer" onchange="if(this.checked){addToRevisionMemo('[${escapedItem}] ${escapedDetail}')}else{removeFromRevisionMemo('[${escapedItem}]')}" title="수정 요청에 추가">
+            </td>` : '<td></td>'}
+          </tr>`;
+        });
+        vHtml += `</table>`;
+      }
+
+      // 개선 제안 (클릭 시 수정 요청에 추가)
+      if (v.recommendations && v.recommendations.length) {
+        vHtml += `<div style="font-size:0.72rem;font-weight:600;color:#555;margin-bottom:4px">개선 제안</div><ul style="margin:0;padding-left:16px">`;
+        v.recommendations.forEach((r, ri) => {
+          const cbId = `vrec_${origIdx}_${ri}`;
+          const escapedR = (r||'').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+          vHtml += `<li style="padding:2px 0;color:#555;display:flex;align-items:flex-start;gap:6px">
+            <input type="checkbox" id="${cbId}" style="cursor:pointer;margin-top:3px" onchange="if(this.checked){addToRevisionMemo('${escapedR}')}else{removeFromRevisionMemo('${escapedR.substring(0,30)}')}" title="수정 요청에 추가">
+            <span>${r}</span>
+          </li>`;
+        });
+        vHtml += `</ul>`;
+      }
+
+      vHtml += `</div></div>`;
+      detailHtml += vHtml;
+    }
+
+    // 검증 실행 버튼 (사전분석 제외, 결과가 있는 항목에만)
+    if (l.action !== '사전분석' && hasResult && !IS_LOCKED) {
+      const vBtnLabel = hasVerification ? '재검증' : '검증 실행';
+      const vBtnBg = hasVerification ? '#9ca3af' : '#7c3aed';
+      detailHtml += `<div style="margin-top:8px">
+        <button onclick="runVerificationForEntry(${origIdx})" style="font-size:0.72rem;padding:4px 12px;border:none;border-radius:5px;background:${vBtnBg};color:white;cursor:pointer;font-weight:600">${vBtnLabel}</button>
+      </div>`;
+    }
+
+    // 요약 뱃지 (검증 포함)
+    let summaryBadges = hasResult
       ? l.result_snapshot.map(r => {
-          const colors = {docx:'#2b579a', pptx:'#d24726', text:'#6b7280', form:'#10b981'};
-          return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colors[r.type]||'#888'}"></span>`;
+          return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${typeColors[r.type]||'#888'}"></span>`;
         }).join('')
       : '';
+    if (hasVerification) {
+      const vBadgeColor = l.verification.status === 'pass' ? '#166534' : l.verification.status === 'fail' ? '#991b1b' : '#92400e';
+      summaryBadges += `<span style="display:inline-block;font-size:0.6rem;padding:0 4px;border-radius:3px;background:${vBadgeColor};color:white;margin-left:2px">${l.verification.score || l.verification.status}</span>`;
+    }
 
     return `<li style="border-bottom:1px solid ${borderColor}">
       <div onclick="this.nextElementSibling.classList.toggle('hidden')" style="padding:8px 0;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
@@ -803,7 +913,7 @@ function startPolling() {
         showBanner(data.warning ? 'error' : 'complete',
           `${data.label} 완료 (${formatElapsed(data.elapsed_seconds)})${warn}`);
         if (_lastStatus === 'running') {
-          setTimeout(() => { loadWorkHistory(); checkAnalysis(); }, 1000);
+          setTimeout(() => { loadWorkHistory(); loadVerification(); checkAnalysis(); }, 1000);
           // 정상 완료 시 5초 후 배너 숨김 (1회만)
           if (!data.warning && !_bannerHideScheduled) {
             _bannerHideScheduled = true;
@@ -852,6 +962,7 @@ async function runAnalysis() {
       startPolling("사전분석");
       btn.textContent = "사전분석 실행";
       btn.disabled = false;
+      await loadWorkHistory();
     } else {
       btn.textContent = "실패: " + (data.message || "오류");
       btn.disabled = false;
@@ -872,6 +983,49 @@ async function checkAnalysis() {
   } catch(e) {}
 }
 
+function updateAnalysisFileLabel(input) {
+  const info = document.getElementById("analysis-revise-file-info");
+  info.textContent = input.files.length ? `${input.files.length}개: ${[...input.files].map(f=>f.name).join(', ')}` : '';
+}
+
+async function reviseAnalysis() {
+  const memo = document.getElementById("analysis-revise-memo").value.trim();
+  const fileInput = document.getElementById("analysis-revise-files");
+  const hasFiles = fileInput && fileInput.files.length > 0;
+
+  // 메모나 파일 중 하나라도 있으면 보충 재실행, 둘 다 없으면 일반 재실행
+  const btn = document.getElementById("analysisReviseBtn");
+  btn.disabled = true;
+  btn.textContent = "재실행 중...";
+
+  // 파일이 있으면 보충 API, 없으면 일반 재실행 API
+  try {
+    let resp;
+    if (memo || hasFiles) {
+      const form = new FormData();
+      form.append("memo", memo || "(보충 파일 첨부)");
+      if (hasFiles) {
+        for (const f of fileInput.files) form.append("files", f);
+      }
+      resp = await fetch(`/api/analysis/${BLOCK_ID}/revise`, { method: "POST", body: form });
+    } else {
+      resp = await fetch(`/api/analysis/${BLOCK_ID}`, { method: "POST" });
+    }
+    const data = await resp.json();
+    if (data.success) {
+      startPolling();
+      document.getElementById("analysis-revise-memo").value = '';
+      if (fileInput) { fileInput.value = ''; document.getElementById("analysis-revise-file-info").textContent = ''; }
+      await loadWorkHistory();
+    }
+    btn.textContent = "사전분석 재실행";
+    btn.disabled = false;
+  } catch(e) {
+    btn.textContent = "오류";
+    setTimeout(() => { btn.textContent = "사전분석 재실행"; btn.disabled = false; }, 3000);
+  }
+}
+
 async function deleteAnalysis() {
   if (!confirm("사전분석 결과를 삭제하시겠습니까?")) return;
   try {
@@ -889,6 +1043,16 @@ async function deleteAnalysis() {
   } catch(e) {}
 }
 
+function updateFileLabel(input) {
+  const info = document.getElementById("revision-file-info");
+  if (input.files.length === 0) {
+    info.textContent = "";
+  } else {
+    const names = [...input.files].map(f => f.name).join(", ");
+    info.textContent = `${input.files.length}개: ${names}`;
+  }
+}
+
 async function requestRevision() {
   const memo = document.getElementById("revision-memo").value.trim();
   if (!memo) { alert("수정 내용을 입력하세요"); return; }
@@ -901,6 +1065,14 @@ async function requestRevision() {
   const form = new FormData();
   form.append("revision_memo", memo);
 
+  // 첨부 파일 추가
+  const fileInput = document.getElementById("revision-files");
+  if (fileInput && fileInput.files.length > 0) {
+    for (const f of fileInput.files) {
+      form.append("files", f);
+    }
+  }
+
   try {
     const resp = await fetch(`/api/revise/${BLOCK_ID}`, { method: "POST", body: form });
     const data = await resp.json();
@@ -908,6 +1080,11 @@ async function requestRevision() {
       startPolling("수정");
       btn.textContent = "수정 요청 →";
       btn.disabled = false;
+      // 입력 초기화
+      document.getElementById("revision-memo").value = '';
+      if (fileInput) { fileInput.value = ''; document.getElementById("revision-file-info").textContent = ''; }
+      // 이력 즉시 갱신 (⏳ 상태로 보임)
+      await loadWorkHistory();
     } else {
       btn.textContent = "실패";
       btn.disabled = false;
@@ -938,10 +1115,12 @@ async function checkResult() {
   btn.disabled = false;
 }
 
-async function runVerification() {
-  const btn = document.getElementById("verifyBtn");
+async function runVerificationForEntry(logIndex) {
+  // 해당 지시이력에 대한 검증 실행
+  const btn = event.target;
   btn.disabled = true;
-  btn.textContent = "검증 중...";
+  btn.textContent = "⟳ 검증 중...";
+  btn.style.background = "#3b82f6";
   _lastAction = {type: 'verification'};
 
   try {
@@ -949,66 +1128,58 @@ async function runVerification() {
     const data = await resp.json();
     if (data.success) {
       startPolling();
-      btn.textContent = "검증 실행";
-      btn.disabled = false;
+      // 검증 완료 대기 → 주기적으로 확인
+      const checkVerify = setInterval(async () => {
+        try {
+          const sr = await fetch(`/api/job-status/${BLOCK_ID}`);
+          const sd = await sr.json();
+          // 검증이 끝났으면 이력 새로고침
+          if (sd.status !== 'running' || !(sd.label || '').includes('검증')) {
+            clearInterval(checkVerify);
+            btn.textContent = "검증 완료";
+            btn.style.background = "#16a34a";
+            await loadWorkHistory();
+            setTimeout(() => { btn.textContent = "재검증"; btn.disabled = false; btn.style.background = "#9ca3af"; }, 2000);
+          }
+        } catch(e) { clearInterval(checkVerify); }
+      }, 3000);
     } else {
-      btn.textContent = "실패: " + (data.message || "산출물 없음");
-      setTimeout(() => { btn.textContent = "검증 실행"; btn.disabled = false; }, 3000);
+      btn.textContent = "실패: " + (data.message || "");
+      btn.style.background = "#ef4444";
+      setTimeout(() => { btn.textContent = "검증 실행"; btn.disabled = false; btn.style.background = "#7c3aed"; }, 3000);
     }
   } catch(e) {
     btn.textContent = "오류";
-    setTimeout(() => { btn.textContent = "검증 실행"; btn.disabled = false; }, 3000);
+    btn.style.background = "#ef4444";
+    setTimeout(() => { btn.textContent = "검증 실행"; btn.disabled = false; btn.style.background = "#7c3aed"; }, 3000);
   }
 }
 
 async function loadVerification() {
-  try {
-    const resp = await fetch(`/api/verify/${BLOCK_ID}`);
-    if (!resp.ok) return;
-    const data = await resp.json();
-    if (data.status === "not_found") return;
-    renderVerification(data);
-  } catch(e) {}
+  // 검증 결과는 지시이력 내에 표시되므로 독립 섹션 불필요
+  // 기존 섹션이 있으면 제거
+  const old = document.getElementById("verification-section");
+  if (old) old.remove();
 }
 
-function renderVerification(v) {
-  let section = document.getElementById("verification-section");
-  if (!section) {
-    section = document.createElement("div");
-    section.id = "verification-section";
-    section.className = "card result-card";
-    section.style.marginTop = "20px";
-    const workHistory = document.getElementById("work-history");
-    workHistory.parentNode.insertBefore(section, workHistory.nextSibling);
+function addToRevisionMemo(text) {
+  const memo = document.getElementById("revision-memo");
+  if (!memo) return;
+  const current = memo.value.trim();
+  if (current) {
+    memo.value = current + "\n\n" + text;
+  } else {
+    memo.value = text;
   }
+  // 스크롤 위치 유지 — focus 하지 않음
+}
 
-  const statusColor = v.status === 'pass' ? '#166534' : v.status === 'fail' ? '#991b1b' : '#92400e';
-  const statusBg = v.status === 'pass' ? '#f0fdf4' : v.status === 'fail' ? '#fef2f2' : '#fffbeb';
-  const statusIcon = v.status === 'pass' ? '✅' : v.status === 'fail' ? '❌' : '⚠️';
-
-  let checksHtml = (v.checks || []).map(c => {
-    const icon = c.status === 'pass' ? '✅' : c.status === 'fail' ? '❌' : '⚠️';
-    return `<tr>
-      <td style="padding:6px 8px;font-size:0.8rem">${icon}</td>
-      <td style="padding:6px 8px;font-size:0.8rem;color:#888">${c.category}</td>
-      <td style="padding:6px 8px;font-size:0.8rem;font-weight:600">${c.item}</td>
-      <td style="padding:6px 8px;font-size:0.8rem">${c.detail}</td>
-    </tr>`;
-  }).join('');
-
-  let recsHtml = (v.recommendations || []).map(r =>
-    `<li style="font-size:0.83rem;padding:4px 0">${r}</li>`
-  ).join('');
-
-  section.innerHTML = `
-    <span class="section-label" style="background:#7c3aed">검증 결과</span>
-    <div style="padding:12px;border-radius:8px;background:${statusBg};margin-bottom:12px">
-      <div style="font-size:1rem;font-weight:700;color:${statusColor}">${statusIcon} ${v.summary || v.status}</div>
-      ${v.score != null ? `<div style="font-size:0.8rem;color:#888;margin-top:4px">점수: ${v.score}/100 · ${v.timestamp || ''}</div>` : ''}
-    </div>
-    ${checksHtml ? `<table style="width:100%;border-collapse:collapse;margin-bottom:12px"><tbody>${checksHtml}</tbody></table>` : ''}
-    ${recsHtml ? `<div style="font-size:0.8rem;font-weight:600;color:#555;margin-bottom:4px">개선 제안</div><ul style="margin:0;padding-left:20px">${recsHtml}</ul>` : ''}
-  `;
+function removeFromRevisionMemo(prefix) {
+  const memo = document.getElementById("revision-memo");
+  if (!memo) return;
+  // prefix가 포함된 줄 블록을 제거
+  const lines = memo.value.split("\n\n");
+  memo.value = lines.filter(l => !l.includes(prefix)).join("\n\n").trim();
 }
 
 let _analysisReady = false;
@@ -1035,6 +1206,7 @@ async function launchClaudeCode() {
       startPolling("초안 작성");
       btn.textContent = "초안 작성 →";
       btn.disabled = false;
+      await loadWorkHistory();
     } else {
       btn.textContent = "실행 실패";
       btn.disabled = false;
@@ -1086,7 +1258,7 @@ function previewFile(url, name) {
   } else if (ext === 'hwpx') {
     previewHwpx(url, name);
   } else if (ext === 'hwp') {
-    previewUnsupported(url, name, 'HWP(구형) 파일은 브라우저 미리보기를 지원하지 않습니다.');
+    previewHwp(url, name);
   } else {
     previewUnsupported(url, name, '이 파일 형식은 브라우저 미리보기를 지원하지 않습니다.');
   }
@@ -1195,6 +1367,41 @@ function previewUnsupported(url, name, msg) {
       <a href="${pUrl}" target="_blank" style="padding:10px 24px;background:#3b82f6;color:white;border-radius:8px;text-decoration:none;font-weight:600;font-size:0.9rem">다운로드</a>
     </div>`;
   document.getElementById('preview-modal').classList.remove('hidden');
+}
+
+async function previewHwp(url, name) {
+  document.getElementById('preview-title').textContent = name;
+  const body = document.getElementById('preview-body');
+  body.innerHTML = '<div style="text-align:center;padding:40px;color:#888">HWP 변환 중...</div>';
+  showDownloadBtn(proxyUrl(url));
+  document.getElementById('preview-modal').classList.remove('hidden');
+
+  // 파일명 추출 — 워크스페이스 files/ 폴더에서 찾기
+  const fname = name || url.split('/').pop();
+  // files/ 경로도 시도
+  const tryPaths = [
+    `/api/preview-hwp/${BLOCK_ID}/${encodeURIComponent(fname)}`,
+    `/api/preview-hwp/${BLOCK_ID}/files%2F${encodeURIComponent(fname)}`,
+  ];
+  let success = false;
+  for (const apiUrl of tryPaths) {
+    try {
+      const resp = await fetch(apiUrl);
+      if (!resp.ok) continue;
+      const html = await resp.text();
+      // srcdoc에 넣기 위해 sandbox iframe 사용
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText = 'width:100%;height:100%;border:none';
+      iframe.srcdoc = html;
+      body.innerHTML = '';
+      body.appendChild(iframe);
+      success = true;
+      break;
+    } catch(e) { continue; }
+  }
+  if (!success) {
+    body.innerHTML = `<div style="text-align:center;padding:40px;color:#888">HWP 미리보기 실패<br><a href="${proxyUrl(url)}" target="_blank" style="color:#3b82f6">다운로드</a></div>`;
+  }
 }
 
 function previewImage(url, name) {

@@ -6,7 +6,7 @@ import os, sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Form, HTTPException
+from fastapi import FastAPI, Request, Form, File, UploadFile, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -65,16 +65,36 @@ async def api_my_tasks(refresh: bool = False):
     )
     # 잠금 상태 + 분석 상태 추가 + detail 캐시 미리 워밍
     if result.get("status") == "ok":
-        locked = get_locked_ids()
-        for t in result["tasks"]:
-            t["locked"] = t["block_id"] in locked
-            t["has_analysis"] = get_analysis(t["block_id"]) is not None
-            t["has_result"] = get_result(t["block_id"]) is not None
-            job = get_job_status(t["block_id"])
-            t["job_status"] = job["status"] if job else None
-            t["job_label"] = job["label"] if job else None
-            t["job_elapsed"] = job["elapsed_seconds"] if job else None
-            t["verify_status"] = get_verification_status(t["block_id"])
+        def _enrich_tasks(tasks):
+            locked = get_locked_ids()
+            for t in tasks:
+                try:
+                    t["locked"] = t["block_id"] in locked
+                    t["has_analysis"] = get_analysis(t["block_id"]) is not None
+                    t["has_result"] = get_result(t["block_id"]) is not None
+                    job = get_job_status(t["block_id"])
+                    t["job_status"] = job["status"] if job else None
+                    t["job_label"] = job["label"] if job else None
+                    t["job_elapsed"] = job["elapsed_seconds"] if job else None
+                    t["job_start_time"] = job.get("jobs", [{}])[0].get("elapsed_seconds", 0) if job and job.get("status") == "running" else None
+                    t["verify_status"] = get_verification_status(t["block_id"])
+                    t["job_warning"] = job.get("warning") if job else None
+                    # memo_log에서 단계별 횟수 집계
+                    logs = get_memo_log(t["block_id"])
+                    t["count_analysis"] = sum(1 for l in logs if l.get("action") == "사전분석")
+                    t["count_draft"] = sum(1 for l in logs if l.get("action") == "초안 작성")
+                    t["count_revision"] = sum(1 for l in logs if l.get("action") == "수정 요청")
+                    t["count_verify"] = sum(1 for l in logs if l.get("verification"))
+                    last_v = next((l.get("verification") for l in reversed(logs) if l.get("verification")), None)
+                    t["verify_score"] = last_v.get("score") if isinstance(last_v, dict) else None
+                except Exception as e:
+                    logger.warning(f"[api] task enrichment error ({t.get('block_id','')}): {e}")
+                    for k in ["locked","has_analysis","has_result","job_status","job_label","job_elapsed",
+                               "job_start_time","verify_status","job_warning","count_analysis","count_draft",
+                               "count_revision","count_verify","verify_score"]:
+                        t.setdefault(k, None)
+            return tasks
+        result["tasks"] = await asyncio.get_event_loop().run_in_executor(None, _enrich_tasks, result["tasks"])
         # detail 페이지 캐시 워밍 (백그라운드)
         for t in result["tasks"]:
             bid = t["block_id"]
@@ -187,8 +207,25 @@ async def task_detail(request: Request, block_id: str):
 
 
 
-# (레거시 API 제거됨: /api/build-prompt, /api/send-to-claude, /api/run-claude)
-# 모든 작업은 Claude Code 터미널 방식으로 실행됨
+@app.get("/api/task-detail/{block_id}")
+async def api_task_detail(block_id: str):
+    """상세 페이지에 필요한 모든 데이터를 한번에 반환"""
+    def _gather():
+        data = {}
+        # 분석 결과
+        analysis = get_analysis(block_id)
+        data["analysis"] = analysis if analysis and analysis.get("status") == "ok" else None
+        # 경고
+        data["warning"] = get_warning(block_id)
+        # 산출물
+        data["result"] = get_result(block_id)
+        # 지시 이력
+        data["memo_log"] = get_memo_log(block_id)
+        # 작업 상태
+        data["job_status"] = get_job_status(block_id)
+        return data
+    data = await asyncio.get_event_loop().run_in_executor(None, _gather)
+    return JSONResponse(data)
 
 
 # ──────────────────────────────────────────────
@@ -259,11 +296,14 @@ async def check_new_tasks():
 
 
 def _auto_prepare_task(block_id: str):
-    """새 과제 자동 준비: 파싱 → 워크스페이스 생성 (파일 다운로드 + 텍스트 추출)"""
+    """새 과제 자동 준비: 파싱 → 워크스페이스 생성 → 사전분석 자동 시작"""
     try:
         task = parse_task_from_block(block_id)
         ws = create_workspace(task)
         logger.info(f"[auto-prepare] {task.get('title', block_id)} 워크스페이스 생성 완료: {ws}")
+        # 사전분석까지만 자동 시작 (초안 작성은 사용자가 수동으로)
+        launch_pre_analysis(task, ws)
+        logger.info(f"[auto-prepare] {task.get('title', block_id)} 사전분석 자동 시작")
     except Exception as e:
         logger.error(f"[auto-prepare] {block_id} 실패: {e}")
 
@@ -308,6 +348,73 @@ async def api_run_analysis(block_id: str):
         raise HTTPException(status_code=500, detail="사전분석 실행에 실패했습니다")
 
 
+@app.post("/api/analysis/{block_id}/revise")
+async def api_revise_analysis(
+    block_id: str,
+    memo: str = Form(...),
+    files: list[UploadFile] = File(default=[]),
+):
+    """사전분석 보충/수정 — 추가 자료 + 메모로 재분석"""
+    _check_locked(block_id)
+    try:
+        # 첨부 파일 저장
+        uploaded_names = []
+        ws = get_workspace_path(block_id)
+        if ws and files:
+            files_dir = ws / "files"
+            files_dir.mkdir(exist_ok=True)
+            for f in files:
+                if f.filename:
+                    dest = files_dir / f.filename
+                    content = await f.read()
+                    dest.write_bytes(content)
+                    uploaded_names.append(f.filename)
+
+        task = await asyncio.get_event_loop().run_in_executor(
+            None, parse_task_from_block, block_id
+        )
+        if not ws:
+            ws = await asyncio.get_event_loop().run_in_executor(
+                None, create_workspace, task
+            )
+
+        # 기존 분석 결과 로드
+        existing_analysis = get_analysis(block_id)
+        existing_text = ""
+        if existing_analysis and existing_analysis.get("analysis"):
+            existing_text = existing_analysis["analysis"]
+
+        file_info = ""
+        if uploaded_names:
+            file_info = "\n\n## 추가 첨부 파일 (files/ 폴더에 저장됨)\n" + "\n".join(f"- files/{n}" for n in uploaded_names)
+
+        from modules.workspace_launcher import launch_background, _save_memo_log
+        _save_memo_log(block_id, "사전분석 보충", memo)
+
+        instruction = f"""CLAUDE.md를 읽고, files/ 폴더의 첨부파일을 분석한 뒤,
+기존 사전분석 결과를 보충/수정해주세요.
+
+## 기존 사전분석 결과
+{existing_text}
+
+## 보충/수정 요청
+{memo}
+{file_info}
+
+수정된 전체 분석 결과를 analysis.md 파일로 저장하세요.
+마지막으로 analysis.json 파일도 저장하세요:
+{{"status": "ok", "analysis": "(analysis.md 내용 전체)"}}"""
+
+        success = launch_background(ws, instruction, block_id, "사전분석")
+        return JSONResponse({
+            "success": success,
+            "message": f"사전분석 보충 시작 (첨부 {len(uploaded_names)}개)" if success else "실행 실패"
+        })
+    except Exception as e:
+        logger.error(f"[analysis-revise] 보충 실패 ({block_id}): {e}")
+        raise HTTPException(status_code=500, detail="사전분석 보충에 실패했습니다")
+
+
 @app.delete("/api/analysis/{block_id}")
 async def api_delete_analysis(block_id: str):
     """사전분석 결과 삭제"""
@@ -334,17 +441,41 @@ async def api_job_status(block_id: str):
 # 7-1. 산출물 수정
 # ──────────────────────────────────────────────
 @app.post("/api/revise/{block_id}")
-async def revise_output(block_id: str, revision_memo: str = Form(...)):
-    """기존 산출물 수정 — Claude Code 터미널 실행"""
+async def revise_output(
+    block_id: str,
+    revision_memo: str = Form(...),
+    files: list[UploadFile] = File(default=[]),
+):
+    """기존 산출물 수정 — 첨부 파일 저장 + Claude Code 터미널 실행"""
     _check_locked(block_id)
     try:
+        # 첨부 파일을 워크스페이스 files/에 저장
+        uploaded_names = []
+        if files:
+            ws = get_workspace_path(block_id)
+            if ws:
+                files_dir = ws / "files"
+                files_dir.mkdir(exist_ok=True)
+                for f in files:
+                    if f.filename:
+                        dest = files_dir / f.filename
+                        content = await f.read()
+                        dest.write_bytes(content)
+                        uploaded_names.append(f.filename)
+                        logger.info(f"[revise] 첨부 파일 저장: {f.filename} ({len(content)} bytes)")
+
+        # 첨부 파일이 있으면 메모에 추가
+        memo = revision_memo
+        if uploaded_names:
+            memo += "\n\n## 첨부 파일 (files/ 폴더에 저장됨)\n" + "\n".join(f"- files/{n}" for n in uploaded_names)
+
         task = await asyncio.get_event_loop().run_in_executor(
             None, parse_task_from_block, block_id
         )
-        success = launch_revision(task, revision_memo)
+        success = launch_revision(task, memo)
         return JSONResponse({
             "success": success,
-            "message": "Terminal에서 수정이 시작되었습니다." if success else "Terminal 실행 실패"
+            "message": f"수정 시작 (첨부 {len(uploaded_names)}개)" if success else "실행 실패"
         })
     except Exception as e:
         logger.error(f"[revise] 수정 실패 ({block_id}): {e}")
@@ -451,21 +582,58 @@ async def api_save_result(block_id: str, request: Request):
     return JSONResponse({"status": "ok"})
 
 
-@app.get("/api/download/{block_id}/{filename}")
+@app.get("/api/download/{block_id}/{filename:path}")
 async def download_file(block_id: str, filename: str):
-    """워크스페이스 파일 다운로드 (docx 등)"""
+    """워크스페이스 파일 다운로드 (docx, hwp, files/첨부 등)"""
     ws = get_workspace_path(block_id)
     if not ws:
         raise HTTPException(status_code=404, detail="워크스페이스를 찾을 수 없습니다")
-    # Path Traversal 방어: 파일명에 경로 구분자 차단 + resolve 검증
-    if '/' in filename or '\\' in filename or '..' in filename:
+    if '..' in filename:
         raise HTTPException(status_code=400, detail="잘못된 파일명입니다")
     file_path = (ws / filename).resolve()
     if not file_path.is_relative_to(ws.resolve()):
         raise HTTPException(status_code=403, detail="접근이 거부되었습니다")
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다")
-    return FileResponse(file_path, filename=filename)
+    # 파일명만 추출해서 다운로드명으로 사용
+    download_name = file_path.name
+    return FileResponse(file_path, filename=download_name)
+
+
+@app.get("/api/preview-hwp/{block_id}/{filename:path}")
+async def preview_hwp(block_id: str, filename: str):
+    """HWP 파일을 HTML로 변환하여 미리보기 제공"""
+    ws = get_workspace_path(block_id)
+    if not ws:
+        raise HTTPException(status_code=404, detail="워크스페이스를 찾을 수 없습니다")
+    if '..' in filename:
+        raise HTTPException(status_code=400, detail="잘못된 파일명입니다")
+    # 워크스페이스 루트 또는 files/ 하위에서 찾기
+    file_path = (ws / filename).resolve()
+    if not file_path.exists():
+        file_path = (ws / "files" / filename).resolve()
+    if not file_path.is_relative_to(ws.resolve()):
+        raise HTTPException(status_code=403, detail="접근이 거부되었습니다")
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다")
+
+    import subprocess
+    converter = os.path.join(os.path.dirname(__file__), "modules", "hwp_converter.js")
+    try:
+        result = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: subprocess.run(
+                ["node", converter, str(file_path), "html"],
+                capture_output=True, timeout=15,
+            )
+        )
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail="HWP 변환 실패")
+        return HTMLResponse(content=result.stdout.decode("utf-8", errors="ignore"))
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="HWP 변환 시간 초과")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"HWP 변환 오류: {str(e)}")
 
 
 _PROXY_ALLOWED_DOMAINS = {
@@ -490,10 +658,16 @@ async def proxy_file(url: str):
             resp = await client.get(url)
             resp.raise_for_status()
             ct = resp.headers.get("content-type", "application/octet-stream")
+            # URL에서 파일명 추출
+            from urllib.parse import unquote
+            fname = unquote(parsed.path.split("/")[-1]) or "download"
             return StreamingResponse(
                 iter([resp.content]),
                 media_type=ct,
-                headers={"Content-Disposition": "inline"}
+                headers={
+                    "Content-Disposition": f'inline; filename="{fname}"',
+                    "X-Filename": fname,
+                }
             )
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail="외부 파일 요청 실패")
@@ -558,4 +732,9 @@ async def batch_verify(request: Request):
 if __name__ == "__main__":
     import uvicorn
     is_dev = os.getenv("ENV", "dev") == "dev"
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=is_dev)
+    uvicorn.run(
+        "main:app", host="0.0.0.0", port=8000,
+        reload=is_dev,
+        reload_dirs=[".", "modules", "templates", "static", "rules"] if is_dev else None,
+        reload_includes=["main.py", "modules/*.py", "templates/*.html", "static/*.css", "rules/*.md"] if is_dev else None,
+    )

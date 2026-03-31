@@ -45,7 +45,8 @@ try:
         with open(_CACHE_FILE, "r", encoding="utf-8") as f:
             _disk = _json.load(f)
         _my_tasks_cache["tasks"] = _disk.get("tasks")
-        _my_tasks_cache["ts"] = _disk.get("ts", 0.0)
+        # 서버 시작 시 TTL 리셋 — 디스크 캐시가 있으면 즉시 사용, 백그라운드에서 갱신
+        _my_tasks_cache["ts"] = time.time() if _disk.get("tasks") else 0.0
 except Exception as e:
     logger.warning(f"[notion] 디스크 캐시 로드 실패: {e}")
 
@@ -131,7 +132,7 @@ def _fetch_past_tasks_summary(task_ids: list) -> list:
                     {"pointer": {"table": "block", "id": bid}, "version": -1}
                     for bid in batch
                 ]},
-                headers=HEADERS, timeout=20
+                headers=HEADERS, timeout=40
             )
             if r.status_code != 200:
                 logger.warning(f"[notion] 과거 과제 배치 fetch 실패: status {r.status_code}")
@@ -430,68 +431,102 @@ def _extract_mentor_user_ids(props: dict) -> list:
 
 
 def _fetch_my_tasks_blocking() -> list:
-    """전체 컬렉션을 배치 스캔해 MY_USER_ID가 담당멘토인 블록만 반환"""
-    # 1. block_id 목록
+    """queryCollection에 멘토 필터를 걸어 내 담당 과제만 가져옴"""
+    # 1. 멘토 필터 적용 — 서버에서 필터링하여 내 과제만 반환
     resp = requests.post(
         f"{NOTION_BASE}/queryCollection",
         json={
             "collection":     {"id": COLLECTION_ID,       "spaceId": SPACE_ID},
             "collectionView": {"id": DASHBOARD_VIEW_ID,   "spaceId": SPACE_ID},
-            "query": {},
+            "query": {
+                "filter": {
+                    "operator": "and",
+                    "filters": [{
+                        "property": MENTOR_PROP_KEY,
+                        "filter": {
+                            "operator": "person_contains",
+                            "value": {"type": "exact", "value": MY_USER_ID}
+                        }
+                    }]
+                }
+            },
             "loader": {
                 "type": "reducer",
-                "reducers": {"collection_group_results": {"type": "results", "limit": 9999}},
-                "userTimeZone": "Asia/Seoul"
+                "reducers": {"collection_group_results": {"type": "results", "limit": 300}},
+                "userTimeZone": "Asia/Seoul",
+                "searchQuery": "",
             }
         },
-        headers=HEADERS, timeout=20
+        headers=HEADERS, timeout=60
     )
     resp.raise_for_status()
-    block_ids = (resp.json().get("result", {})
-                            .get("reducerResults", {})
-                            .get("collection_group_results", {})
-                            .get("blockIds", []))
+    data = resp.json()
+    block_ids = (data.get("result", {})
+                     .get("reducerResults", {})
+                     .get("collection_group_results", {})
+                     .get("blockIds", []))
+    logger.info(f"[notion] queryCollection (멘토 필터) 결과: {len(block_ids)}건 block_id")
 
-    # 2. 50개씩 배치 fetch → 멘토 필터
+    # recordMap에 이미 블록 데이터가 포함되어 있으면 직접 사용 (추가 fetch 불필요)
+    record_blocks = data.get("recordMap", {}).get("block", {})
+
+    # 2. recordMap에서 직접 추출 (추가 API 호출 없음) 또는 누락분만 배치 fetch
+    all_blocks = dict(record_blocks)
+
+    # recordMap에 없는 block만 추가 fetch
+    missing = [bid for bid in block_ids if bid not in all_blocks]
+    if missing:
+        logger.info(f"[notion] recordMap에 {len(block_ids) - len(missing)}건 포함, {len(missing)}건 추가 fetch")
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def _fetch_batch(batch):
+            for attempt in range(3):
+                try:
+                    r = requests.post(
+                        f"{NOTION_BASE}/syncRecordValues",
+                        json={"requests": [
+                            {"pointer": {"table": "block", "id": bid}, "version": -1}
+                            for bid in batch
+                        ]},
+                        headers=HEADERS, timeout=40
+                    )
+                    if r.status_code == 200:
+                        return r.json().get("recordMap", {}).get("block", {})
+                    logger.warning(f"[notion] 배치 fetch 실패 (attempt {attempt+1}): status {r.status_code}")
+                except Exception as e:
+                    logger.warning(f"[notion] 배치 fetch 예외 (attempt {attempt+1}): {e}")
+                if attempt < 2:
+                    import time as _t; _t.sleep(2 * (attempt + 1))  # 429 대응: 점진적 대기
+            return {}
+
+        batches = [missing[i:i+50] for i in range(0, len(missing), 50)]
+        with ThreadPoolExecutor(max_workers=2) as pool:  # 동시 2개로 제한 (429 방지)
+            futures = {pool.submit(_fetch_batch, batch): batch for batch in batches}
+            for future in as_completed(futures):
+                try:
+                    all_blocks.update(future.result())
+                except Exception as e:
+                    logger.warning(f"[notion] 배치 병렬 처리 예외: {e}")
+
     tasks = []
-    for i in range(0, len(block_ids), 50):
-        batch = block_ids[i:i + 50]
-        try:
-            r = requests.post(
-                f"{NOTION_BASE}/syncRecordValues",
-                json={"requests": [
-                    {"pointer": {"table": "block", "id": bid}, "version": -1}
-                    for bid in batch
-                ]},
-                headers=HEADERS, timeout=20
-            )
-            if r.status_code != 200:
-                logger.warning(f"[notion] 멘토 필터 배치 fetch 실패: status {r.status_code}")
-                continue
-            blocks = r.json().get("recordMap", {}).get("block", {})
-        except Exception as e:
-            logger.warning(f"[notion] 멘토 필터 배치 fetch 예외: {e}")
+    for bid in block_ids:
+        props = all_blocks.get(bid, {}).get("value", {}).get("properties", {})
+        if not props:
             continue
+        tasks.append({
+            "block_id": bid,
+            "title":       _get_text(props, "title"),
+            "subject":     _get_text(props, "mGaa"),
+            "grade":       _get_text(props, "Tv~<"),
+            "semester":    _get_text(props, "wuL:"),
+            "status":      _get_text(props, "owtr"),
+            "activity":    _get_text(props, "CrVV"),
+            "submit_type": _get_text(props, "Dogm"),
+            "apply_date":  _get_date(props, "MmFA"),
+            "link": f"https://www.notion.so/{bid.replace('-', '')}",
+        })
 
-        for bid in batch:
-            props = blocks.get(bid, {}).get("value", {}).get("properties", {})
-            if not props:
-                continue
-            if MY_USER_ID not in _extract_mentor_user_ids(props):
-                continue
-            tasks.append({
-                "block_id": bid,
-                "title":       _get_text(props, "title"),
-                "subject":     _get_text(props, "mGaa"),
-                "grade":       _get_text(props, "Tv~<"),
-                "semester":    _get_text(props, "wuL:"),
-                "status":      _get_text(props, "owtr"),
-                "activity":    _get_text(props, "CrVV"),
-                "submit_type": _get_text(props, "Dogm"),
-                "apply_date":  _get_date(props, "MmFA"),
-                "link": f"https://www.notion.so/{bid.replace('-', '')}",
-            })
-
+    logger.info(f"[notion] 최종 결과: {len(tasks)}건 (queryCollection {len(block_ids)}건, recordMap {len(record_blocks)}건)")
     return tasks
 
 
@@ -501,9 +536,35 @@ def _do_fetch_and_cache() -> list:
         _my_tasks_cache["loading"] = True
     try:
         tasks = _fetch_my_tasks_blocking()
+        # 새로 가져온 결과와 기존 캐시를 병합 (누락 방지)
+        prev_tasks = _my_tasks_cache.get("tasks") or []
+        prev_count = len(prev_tasks)
+        if tasks:
+            # 새 결과 기준 + 기존 캐시에만 있는 항목 보존
+            new_ids = {t["block_id"] for t in tasks}
+            merged = list(tasks)
+            stale_carried = 0
+            for pt in prev_tasks:
+                if pt["block_id"] not in new_ids:
+                    merged.append(pt)
+                    stale_carried += 1
+            if stale_carried > 0:
+                logger.warning(f"[notion] 조회 {len(tasks)}건 + 이전 캐시 보존 {stale_carried}건 = 총 {len(merged)}건")
+                with _cache_lock:
+                    _my_tasks_cache["stale"] = True
+            else:
+                with _cache_lock:
+                    _my_tasks_cache["stale"] = False
+            tasks = merged
+        elif prev_tasks:
+            logger.warning(f"[notion] 조회 0건 — 이전 캐시 {prev_count}건 유지")
+            with _cache_lock:
+                _my_tasks_cache["stale"] = True
+            return prev_tasks
         with _cache_lock:
             _my_tasks_cache["tasks"] = tasks
             _my_tasks_cache["ts"]    = time.time()
+            _my_tasks_cache["stale"] = False
         os.makedirs(os.path.dirname(_CACHE_FILE), exist_ok=True)
         # 원자적 파일 쓰기: 임시파일 → rename
         import tempfile
@@ -529,22 +590,32 @@ def get_my_tasks(force: bool = False) -> dict:
     """캐시된 내 과업 목록 반환. {'status': 'ok'|'loading', 'tasks': [...]}"""
     now = time.time()
 
-    # force=True: 동기로 즉시 재조회
+    # force=True: 백그라운드 갱신 즉시 시작 + 기존 캐시 반환
     if force:
+        with _cache_lock:
+            if not _my_tasks_cache["loading"]:
+                _threading.Thread(target=_do_fetch_and_cache, daemon=True).start()
+            cached = _my_tasks_cache["tasks"]
+            stale = _my_tasks_cache.get("stale", False)
+        if cached:
+            return {"status": "ok", "tasks": cached, "stale": True, "refreshing": True}
+        # 캐시 자체가 없으면 동기 대기
         tasks = _do_fetch_and_cache()
-        return {"status": "ok", "tasks": tasks}
+        stale = _my_tasks_cache.get("stale", False)
+        return {"status": "ok", "tasks": tasks, "stale": stale}
 
     with _cache_lock:
+        stale = _my_tasks_cache.get("stale", False)
         # 캐시 유효
         if _my_tasks_cache["tasks"] is not None:
             if now - _my_tasks_cache["ts"] < MY_TASKS_TTL:
-                return {"status": "ok", "tasks": _my_tasks_cache["tasks"]}
+                return {"status": "ok", "tasks": _my_tasks_cache["tasks"], "stale": stale}
 
         # 이미 로딩 중
         if _my_tasks_cache["loading"]:
             cached = _my_tasks_cache["tasks"]
             if cached is not None:
-                return {"status": "ok", "tasks": cached}
+                return {"status": "ok", "tasks": cached, "stale": stale}
             return {"status": "loading", "tasks": []}
 
     # 백그라운드 스레드에서 갱신 (일반 TTL 만료 시)

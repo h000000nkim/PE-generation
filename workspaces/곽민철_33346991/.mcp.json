@@ -3,6 +3,10 @@
     "word-document-server": {
       "command": "uvx",
       "args": ["--from", "office-word-mcp-server", "word_mcp_server"]
+    },
+    "hwpx-document-server": {
+      "command": "C:/Users/h00n/AppData/Roaming/Python/Python313-arm64/Scripts/hwpx-mcp-server.exe",
+      "args": []
     }
   }
 }

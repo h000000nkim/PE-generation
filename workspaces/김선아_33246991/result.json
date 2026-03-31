@@ -1,0 +1,14 @@
+{
+  "outputs": [
+    {
+      "label": "수행평가1 — 비판적 리터러시 프로젝트 텍스트",
+      "type": "text",
+      "file": "result.md"
+    },
+    {
+      "label": "수행평가1 — 비판적 리터러시 프로젝트 Word 문서",
+      "type": "docx",
+      "file": "result.docx"
+    }
+  ]
+}

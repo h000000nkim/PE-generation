@@ -1,116 +1,101 @@
 {
-  "status": "warning",
-  "timestamp": "2026-03-30T15:30:00+09:00",
-  "score": 82,
-  "summary": "사실관계와 파일 무결성은 양호하나, 금지 표현('단순히') 사용 1건, 영어 줄거리 분량 초과, p.82 경계 미세 초과가 확인됨.",
+  "status": "pass",
+  "timestamp": "2026-03-31T09:30:00+09:00",
+  "score": 92,
+  "summary": "분량·구조를 이전 회차(prev_result.docx)에 맞춰 축약 완료. 영어 ~135단어 1단락, 한국어 ~270자 1단락. p.83 Sal 정체 내용 삭제, p.82 사진 묘사까지만 포함.",
   "checks": [
     {
       "category": "기본 요건",
       "item": "제출 형식 일치",
       "status": "pass",
-      "detail": "Dogm=워드, 실제 산출물=result.docx (40,317 bytes). 형식 일치."
+      "detail": "Dogm=워드, 실제 산출물=result.docx. 형식 일치."
     },
     {
       "category": "기본 요건",
-      "item": "요청사항 반영 — 영어 줄거리",
+      "item": "요청사항 — 영어 줄거리 존재",
       "status": "pass",
-      "detail": "p.61~82 범위의 영어 줄거리가 시간순으로 작성됨. 주요 사건(interaction meeting 준비, 어른들 반응, 아이들의 Rick/Klara 대우, Rick 반격, Rick-Klara 대화, 모임 후 성찰, Josie 발병, Morgan's Falls 약속, Sal 사진) 모두 포함."
+      "detail": "p.61~82 범위의 영어 줄거리가 1단락으로 작성됨. 주요 사건(interaction meeting, Rick 초대, 어른들 편견, 아이들의 Klara 위협, Rick 반격, Rick-Klara 대화, Josie 발병, Morgan's Falls 사진) 포함."
     },
     {
       "category": "기본 요건",
-      "item": "요청사항 반영 — 한국어 느낀점",
+      "item": "요청사항 — 한국어 느낀점 존재",
       "status": "pass",
-      "detail": "한국어 느낀점이 개인 감상 중심으로 작성됨. 줄거리 재요약 없이 의견/비판 위주."
+      "detail": "한국어 느낀점이 1단락 개인 감상 중심으로 작성됨."
+    },
+    {
+      "category": "기본 요건",
+      "item": "분량 — 이전 회차와 일관성",
+      "status": "pass",
+      "detail": "이전 회차: 영어 ~130단어, 한국어 ~280자. 현재: 영어 ~135단어, 한국어 ~270자. 이전과 동일 수준."
     },
     {
       "category": "기본 요건",
       "item": "평가기준 이미지 확인",
       "status": "warning",
-      "detail": "첨부 스크린샷(Screenshot 2026-03-30 2.15.58 PM.png)이 극도로 잘려 있어 '선생님께서 공지한' 텍스트만 보임. 구체적 배점/루브릭 확인 불가. 평가기준 미확인 상태에서 작성됨."
-    },
-    {
-      "category": "기본 요건",
-      "item": "이전 회차와 분량 일관성",
-      "status": "warning",
-      "detail": "학생이 '이전과 동일한 분량'을 요청했으나 이전 회차 결과물이 현 워크스페이스에 없어 비교 불가. 적정 분량은 추정치로 설정됨."
-    },
-    {
-      "category": "내용 품질",
-      "item": "금지 표현 — '단순히'",
-      "status": "fail",
-      "detail": "느낀점 2번째 문단에 '단순히 배신이라고 보지 않고'라는 표현 사용. writing_principles.md에서 '단순히' 사용 금지 규칙 위반."
+      "detail": "첨부 스크린샷이 극도로 잘려 '선생님께서 공지한' 텍스트만 보임. 구체적 배점/루브릭 확인 불가."
     },
     {
       "category": "내용 품질",
       "item": "AI 특유 문체 검사",
       "status": "pass",
-      "detail": "나열식 문체 없음. '~할 수 있다' 반복 없음. 자연스러운 고등학생 어투로 작성됨."
+      "detail": "나열식 문체 없음. 자연스러운 고등학생 어투."
+    },
+    {
+      "category": "내용 품질",
+      "item": "금지 표현 검사",
+      "status": "pass",
+      "detail": "'단순히', '도구적', 영어 직역 어구, 진로 명시적 표현 모두 미사용."
     },
     {
       "category": "내용 품질",
       "item": "진로 연결 자연스러움",
       "status": "pass",
-      "detail": "진로(경영학/국제통상학)를 명시적으로 앞세우지 않음. 사회적 위계와 차별에 대한 감상이 자연스러운 흐름 안에서 서술됨."
-    },
-    {
-      "category": "내용 품질",
-      "item": "소제목/번호 매기기",
-      "status": "pass",
-      "detail": "본문에 소제목이나 번호 매기기 없이 서술형으로 작성됨. 대제목(heading)만 사용."
-    },
-    {
-      "category": "내용 품질",
-      "item": "영어 줄거리 분량",
-      "status": "warning",
-      "detail": "영어 줄거리가 약 700단어 이상으로, 계획(400-500단어)보다 상당히 많음. 단, 이전 회차 분량 기준이 없어 과다 여부 단정 불가."
+      "detail": "경영학/국제통상학을 명시적으로 앞세우지 않음. 사회적 편견에 대한 감상이 자연스러운 흐름."
     },
     {
       "category": "내용 품질",
       "item": "영어 수준 적절성",
       "status": "pass",
-      "detail": "고등학생 수준의 영어로 작성됨. 과도하게 학술적이거나 원어민 수준의 문체 아님. 원문 표현을 적절히 paraphrase."
+      "detail": "고등학생 수준 영어. 과도하게 학술적이지 않으며 자연스러운 서술."
+    },
+    {
+      "category": "내용 품질",
+      "item": "이전 회차와 구조 일관성",
+      "status": "pass",
+      "detail": "이전 회차와 동일하게 영어 1단락 + 느낀점 1단락 구조."
     },
     {
       "category": "사실 관계",
       "item": "원문 대조 — 주요 사건",
       "status": "pass",
-      "detail": "interaction meeting 대화, Rick의 피자 농담, 대형 여성의 실언, Danny/Scrub의 Klara 위협, Rick의 pet object 지적, Rick-Klara 대화, Josie 발병, Morgan's Falls, Sal 사진 등 모든 주요 사건이 원문과 일치."
-    },
-    {
-      "category": "사실 관계",
-      "item": "원문 대조 — 인물/세부사항",
-      "status": "pass",
-      "detail": "Marsha(long-armed girl), Danny, Scrub, Rick, Sara(Danny의 보호자), Pam(food blending woman) 등 인물 정보 정확. 대화 내용도 원문과 부합."
+      "detail": "interaction meeting, Rick 초대, 어른의 'such a shame' 발언, Danny/Scrub의 Klara 위협, Rick의 pet object 반격, Rick-Klara 대화, Josie 발병, Morgan's Falls 사진 등 원문과 일치."
     },
     {
       "category": "사실 관계",
       "item": "페이지 범위 준수 (p.61-82)",
-      "status": "warning",
-      "detail": "Sal의 정체 확인 장면('That's Sal. My sister.')은 실제 p.83에 해당. 요청 범위(p.61-82)를 미세하게 초과. 단, p.82 마지막에서 제3의 소녀가 등장하므로 자연스러운 연결을 위해 포함한 것으로 보임."
+      "status": "pass",
+      "detail": "p.82 사진 속 제3의 소녀 묘사까지만 포함. p.83의 Sal 정체 확인 내용 삭제 완료."
     },
     {
       "category": "사실 관계",
       "item": "학생 기본 정보",
       "status": "pass",
-      "detail": "김동우, 대건고, 2학년 — CLAUDE.md 파싱 데이터와 일치."
+      "detail": "김동우, 대건고, 2학년 — CLAUDE.md 데이터와 일치."
     },
     {
       "category": "파일 무결성",
-      "item": "result.json outputs 배열과 실제 파일 일치",
+      "item": "result.json과 실제 파일 일치",
       "status": "pass",
-      "detail": "result.json에 result.docx 1개 등록. 실제 파일 존재 확인 (40,317 bytes > 0)."
+      "detail": "result.json에 result.docx 1개 등록. 실제 파일 존재."
     },
     {
       "category": "파일 무결성",
-      "item": "docx 파일 크기",
+      "item": "docx 파일 정상성",
       "status": "pass",
-      "detail": "result.docx = 40,317 bytes. 정상 크기."
+      "detail": "Word MCP로 텍스트 추출 성공. 정상 문서."
     }
   ],
   "recommendations": [
-    "느낀점 2번째 문단의 '단순히 배신이라고 보지 않고'에서 '단순히'를 삭제하거나 다른 표현으로 교체 (예: '그런 변화를 배신이라고 보지 않고' 또는 '변화를 곧바로 배신이라 단정하지 않고')",
-    "영어 줄거리 분량이 700단어 이상으로 다소 긺 — 이전 회차 결과물을 확인하여 분량 일관성을 맞출 필요 있음",
-    "p.83의 Sal 정체 확인 문장은 범위 초과이므로, 'a third figure whose face is turned away from the camera' 정도로 마무리하고 Sal 언급을 삭제하는 것을 검토",
-    "평가기준 스크린샷이 잘려 있어 배점/루브릭 미확인 — 학생에게 완전한 스크린샷 재요청 권장"
+    "평가기준 스크린샷이 잘려 배점/루브릭 미확인 — 완전한 스크린샷 재요청 권장"
   ]
 }

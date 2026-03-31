@@ -6,11 +6,16 @@
 - Canva MCP 도구는 이미 승인 완료됨 — 권한 확인 없이 바로 호출할 것
 - `request-outline-review`는 절대 사용하지 말 것 — `generate-design-structured`를 바로 호출할 것
 - "권한이 필요합니다", "승인해주세요", "위젯에서 검토해주세요" 등의 메시지를 절대 출력하지 말 것
-- 발표 대본은 PPTX와 별도로 result.md에 슬라이드별로 저장할 것
+- 발표 대본은 PPTX와 별도로 `과목_과제제목_대본_이름.md` 파일에 슬라이드별로 저장할 것 (result.md 금지)
 - word 파일은 반드시 Word MCP 도구(word-document-server)로 생성할 것, python-docx 직접 사용 금지
+- hwpx 파일은 반드시 HWPX MCP 도구(hwpx-document-server)로 생성할 것
+- 제출 형식이 "한글", "HWP", "hwp", "hwpx"이면 HWPX MCP를 사용할 것
 - word 파일 폰트는 "Malgun Gothic"(영문명)으로 설정할 것
 - word 파일 본문 단락은 양끝 맞춤(justify)으로 고정할 것 — 대제목 제외
 - 구분선을 넣지 말 것 (지시할때만 입력)
+- **파일명을 `result.docx`, `result.hwpx` 등 임시 이름으로 저장하지 말 것** — 반드시 `과목_과제제목_이름.확장자` 형식 사용
+- **글자에 색상을 넣지 말 것** — 모든 텍스트는 검정색(흑백)만 사용
+- **표에 컬러 배경을 넣지 말 것** — 필요시 회색 음영(#D9D9D9 등)만 사용
 
 ### 학생 정보
 - 학년을 임의로 고정하지 말고 워크스페이스 CLAUDE.md에 파싱된 grade 값 그대로 사용할 것

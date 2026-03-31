@@ -58,37 +58,57 @@
 
   /* 카드 */
   .task-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;
   }
   .task-card {
-    background: white; border: 1px solid #e5e5e5; border-radius: 12px; padding: 20px;
-    transition: box-shadow 0.2s, transform 0.1s; display: flex; flex-direction: column; gap: 8px;
+    background: white; border: 1px solid #e5e5e5; border-radius: 12px; padding: 16px;
+    transition: box-shadow 0.2s, transform 0.1s; display: flex; flex-direction: column; gap: 10px;
   }
   .task-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); transform: translateY(-2px); }
   .task-card.selected { border-color: #3b82f6; background: #eff6ff; }
-  .task-card.locked-card { opacity: 0.6; }
+  .task-card.locked-card { opacity: 0.55; }
+  .task-card.has-error { border-color: #fca5a5; }
 
   .card-top { display: flex; align-items: center; gap: 10px; }
   .card-check { width: 18px; height: 18px; cursor: pointer; accent-color: #3b82f6; flex-shrink: 0; }
   .card-link { text-decoration: none; color: inherit; flex: 1; }
+  .card-header { display: flex; justify-content: space-between; align-items: flex-start; }
   .card-subject {
-    font-size: 0.78rem; font-weight: 600; color: #4CAF50;
-    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;
+    font-size: 0.75rem; font-weight: 700; color: #4CAF50;
+    text-transform: uppercase; letter-spacing: 0.05em;
   }
-  .card-title { font-size: 1rem; font-weight: 600; line-height: 1.4; word-break: break-all; }
-  .card-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 0.78rem; color: #666; }
-  .meta-tag { background: #f5f5f5; padding: 3px 8px; border-radius: 4px; }
-  .status-badge { padding: 3px 8px; border-radius: 4px; font-weight: 600; }
-  .status-badge.pending   { background: #fff3cd; color: #856404; }
-  .status-badge.in-progress { background: #cce5ff; color: #004085; }
-  .status-badge.done      { background: #d4edda; color: #155724; }
+  .card-deadline {
+    font-size: 0.72rem; font-weight: 600; color: #888; white-space: nowrap;
+  }
+  .card-deadline.urgent { color: #dc2626; }
+  .card-title { font-size: 0.95rem; font-weight: 600; line-height: 1.3; word-break: break-all; margin-top: 2px; }
+  .card-name { font-size: 0.8rem; color: #888; margin-top: 1px; }
 
-  .analysis-badge {
-    font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+  /* 파이프라인 스텝 */
+  .pipeline { display: flex; gap: 4px; }
+  .pipe-step {
+    flex: 1; text-align: center; padding: 6px 2px; border-radius: 6px;
+    font-size: 0.68rem; font-weight: 600; border: 1.5px solid transparent;
+    transition: all 0.2s;
   }
-  .analysis-badge.cached { background: #dbeafe; color: #1d4ed8; }
-  .analysis-badge.running { background: #fef3c7; color: #92400e; }
-  .analysis-badge.none { background: #f3f4f6; color: #9ca3af; }
+  .pipe-step .step-label { color: #555; font-size: 0.6rem; margin-top: 2px; }
+  .pipe-step.idle { background: #d4d4d4; color: #333; }
+  .pipe-step.idle .step-label { color: #555; }
+  .pipe-step.done { background: #d1fae5; color: #065f46; }
+  .pipe-step.running { background: #eff6ff; color: #1d4ed8; border-color: #3b82f6; animation: pulse 1.5s infinite; }
+  .pipe-step.error { background: #fef2f2; color: #991b1b; border-color: #fca5a5; }
+  .pipe-step.verify-pass { background: #d1fae5; color: #065f46; }
+  .pipe-step.verify-warn { background: #fef3c7; color: #92400e; }
+  .pipe-step.verify-fail { background: #fecaca; color: #991b1b; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+  /* 상태 바 */
+  .card-status-bar {
+    font-size: 0.72rem; padding: 5px 10px; border-radius: 6px; text-align: center; font-weight: 600;
+  }
+  .card-status-bar.running { background: #eff6ff; color: #1d4ed8; }
+  .card-status-bar.complete { background: #f0fdf4; color: #166534; }
+  .card-status-bar.error { background: #fef2f2; color: #991b1b; }
 
   .empty-state { text-align: center; padding: 80px 0; color: #aaa; }
 </style>
@@ -156,55 +176,109 @@ function formatElapsed(sec) {
   return m > 0 ? `${m}분 ${s}초` : `${s}초`;
 }
 
-function progressBadges(t) {
-  let html = '';
-  const isRunning = t.job_status === 'running';
-  const runLabel = (t.job_label || '').trim();
+function dDay(dueDate) {
+  if (!dueDate) return '';
+  const now = new Date(); now.setHours(0,0,0,0);
+  const due = new Date(dueDate); due.setHours(0,0,0,0);
+  const diff = Math.round((due - now) / 86400000);
+  if (diff < 0) return `D+${Math.abs(diff)}`;
+  if (diff === 0) return 'D-Day';
+  return `D-${diff}`;
+}
 
-  // 실행 중 — 작업명 + 경과시간
-  if (isRunning) {
-    html += `<span class="analysis-badge running">${runLabel || '작업'}중 ${formatElapsed(t.job_elapsed)}</span>`;
-  }
-  // 분석 상태 — 현재 사전분석 중이면 표시 안 함
-  if (t.has_analysis && !(isRunning && runLabel === '사전분석')) {
-    html += '<span class="analysis-badge cached">분석완료</span>';
-  } else if (!isRunning && !t.has_analysis) {
-    html += '<span class="analysis-badge none">미분석</span>';
-  }
-  // 초안 상태 — 현재 초안 작성/수정 중이면 표시 안 함
-  if (t.has_result && !(isRunning && (runLabel === '초안 작성' || runLabel === '수정'))) {
-    html += '<span class="analysis-badge" style="background:#d1fae5;color:#065f46">초안완료</span>';
-  }
-  // 검증 상태
-  if (t.verify_status && !(isRunning && runLabel === '검증')) {
-    const vc = {pass:'background:#d1fae5;color:#065f46', fail:'background:#fecaca;color:#991b1b', warning:'background:#fef3c7;color:#92400e'};
-    const vl = {pass:'검증통과', fail:'검증실패', warning:'검증경고'};
-    html += `<span class="analysis-badge" style="${vc[t.verify_status] || ''}">${vl[t.verify_status] || t.verify_status}</span>`;
-  }
-  return html;
+function pipeStep(label, count, state, extra) {
+  // state: idle, done, running, error, verify-pass, verify-warn, verify-fail
+  let content = '—';
+  if (state === 'idle') content = '—';
+  else if (state === 'running') content = extra || '⟳';
+  else if (state === 'error') content = '✕';
+  else if (state === 'done') content = count > 0 ? `✓${count > 1 ? ' '+count+'회' : ''}` : '✓';
+  else if (state.startsWith('verify-')) content = extra || '✓';
+
+  return `<div class="pipe-step ${state}">
+    <div>${content}</div>
+    <div class="step-label">${label}</div>
+  </div>`;
 }
 
 function cardHTML(t) {
   const checked = selectedIds.has(t.block_id) ? 'checked' : '';
   const selClass = selectedIds.has(t.block_id) ? 'selected' : '';
   const lockClass = t.locked ? 'locked-card' : '';
+  const errorClass = t.job_warning ? 'has-error' : '';
+  const isRunning = t.job_status === 'running';
+  const runLabel = (t.job_label || '').trim();
+
+  // 마감일
+  const dd = dDay(t.due_date);
+  const ddClass = dd && (dd === 'D-Day' || dd.startsWith('D+')) ? 'urgent' : '';
+  const deadlineHtml = t.due_date ? `<span class="card-deadline ${ddClass}">${t.due_date.slice(5)} (${dd})</span>` : '';
+
+  // 파이프라인 상태 계산
+  let anState = 'idle', anCount = t.count_analysis || 0;
+  let drState = 'idle', drCount = t.count_draft || 0;
+  let rvState = 'idle', rvCount = t.count_revision || 0;
+  let vfState = 'idle', vfExtra = '';
+
+  if (anCount > 0) anState = 'done';
+  if (drCount > 0) drState = 'done';
+  if (rvCount > 0) rvState = 'done';
+
+  // 검증 상태
+  const vfCount = t.count_verify || 0;
+  const vfCountLabel = vfCount > 1 ? ` ${vfCount}회` : '';
+  if (t.verify_status === 'pass') { vfState = 'verify-pass'; vfExtra = t.verify_score != null ? `${t.verify_score}점${vfCountLabel}` : `✓${vfCountLabel}`; }
+  else if (t.verify_status === 'warning') { vfState = 'verify-warn'; vfExtra = t.verify_score != null ? `⚠${t.verify_score}${vfCountLabel}` : `⚠${vfCountLabel}`; }
+  else if (t.verify_status === 'fail') { vfState = 'verify-fail'; vfExtra = t.verify_score != null ? `✕${t.verify_score}${vfCountLabel}` : `✕${vfCountLabel}`; }
+
+  // 진행 중 상태 오버라이드
+  let runExtra = '';
+  if (isRunning) {
+    runExtra = `<span class="run-timer" data-start="${t.job_elapsed || 0}"></span>`;
+    if (runLabel === '사전분석') anState = 'running';
+    else if (runLabel === '초안 작성') drState = 'running';
+    else if (runLabel === '수정') rvState = 'running';
+    else if (runLabel === '검증') vfState = 'running';
+  }
+
+  // 오류 상태
+  if (t.job_warning) {
+    if (runLabel === '사전분석') anState = 'error';
+    else if (runLabel === '초안 작성') drState = 'error';
+    else if (runLabel === '수정') rvState = 'error';
+    else if (runLabel === '검증') vfState = 'error';
+  }
+
+  // 상태 바
+  let statusBar = '';
+  if (isRunning) {
+    statusBar = `<div class="card-status-bar running">${runLabel} 진행 중... ${runExtra}</div>`;
+  } else if (t.job_warning) {
+    statusBar = `<div class="card-status-bar error">❌ ${t.job_warning}</div>`;
+  } else if (t.verify_status === 'pass') {
+    statusBar = `<div class="card-status-bar complete">✅ 검증 통과 ${t.verify_score != null ? t.verify_score+'/100' : ''}</div>`;
+  }
+
   return `
-    <div class="task-card ${selClass} ${lockClass}" id="card-${t.block_id}">
+    <div class="task-card ${selClass} ${lockClass} ${errorClass}" id="card-${t.block_id}">
       <div class="card-top">
         <input type="checkbox" class="card-check" ${checked}
                onchange="toggleSelect('${t.block_id}', this.checked)" />
         <a class="card-link" href="/task/${t.block_id}">
-          ${t.subject ? `<div class="card-subject">${t.subject}</div>` : ''}
-          <div class="card-title">${t.title || '(제목 없음)'}</div>
+          <div class="card-header">
+            ${t.subject ? `<span class="card-subject">${t.subject}</span>` : ''}
+            ${deadlineHtml}
+          </div>
+          <div class="card-title">${(t.title||'').replace((t.subject||'')+'_','').replace((t.subject||'')+' _','').trim() || t.title || '(제목 없음)'}</div>
         </a>
       </div>
-      <div class="card-meta">
-        ${t.grade    ? `<span class="meta-tag">${t.grade}</span>`    : ''}
-        ${t.semester ? `<span class="meta-tag">${t.semester}</span>` : ''}
-        ${t.activity ? `<span class="meta-tag">${t.activity}</span>` : ''}
-        ${t.status   ? `<span class="status-badge ${statusClass(t.status)}">${t.status}</span>` : ''}
-        ${progressBadges(t)}
+      <div class="pipeline">
+        ${pipeStep('분석', anCount, anState, isRunning && runLabel === '사전분석' ? runExtra : '')}
+        ${pipeStep('초안', drCount, drState, isRunning && runLabel === '초안 작성' ? runExtra : '')}
+        ${pipeStep('수정', rvCount, rvState, isRunning && runLabel === '수정' ? runExtra : '')}
+        ${pipeStep('검증', 0, vfState, vfExtra)}
       </div>
+      ${statusBar}
     </div>`;
 }
 
@@ -283,13 +357,53 @@ async function loadTasks(force = false) {
     const data = await res.json();
     if (data.status === 'ok') {
       clearInterval(polling); polling = null;
-      renderTasks(data.tasks);
+      if (data.tasks && data.tasks.length > 0) {
+        renderTasks(data.tasks);
+        // 백그라운드 갱신 중이면 잠시 후 자동 리로드
+        if (data.refreshing) {
+          setTimeout(() => loadTasks(false), 5000);
+        }
+        // Notion 갱신 실패 경고
+        const staleBar = document.getElementById('stale-bar');
+        if (data.stale) {
+          if (!staleBar) {
+            const bar = document.createElement('div');
+            bar.id = 'stale-bar';
+            bar.style.cssText = 'padding:8px 16px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;margin-bottom:12px;font-size:0.82rem;color:#92400e;display:flex;justify-content:space-between;align-items:center';
+            bar.innerHTML = '<span>⚠️ Notion 동기화 실패 — 최근 변경사항이 반영되지 않았을 수 있습니다</span><button onclick="loadTasks(true);this.parentElement.remove()" style="padding:4px 12px;border:1px solid #fcd34d;border-radius:6px;background:white;cursor:pointer;font-size:0.78rem;font-weight:600">재시도</button>';
+            document.getElementById('content').prepend(bar);
+          }
+        } else if (staleBar) {
+          staleBar.remove();
+        }
+      } else {
+        document.getElementById('loading-state').style.display = 'block';
+        document.getElementById('loading-state').innerHTML =
+          `<p style="color:#f97316;font-size:0.95rem">⚠️ 과제 목록이 비어 있습니다.<br>
+          <small style="color:#888">서버가 재시작되어 캐시가 초기화되었을 수 있습니다.</small><br>
+          <button onclick="loadTasks(true)" style="margin-top:12px;padding:8px 20px;border:1px solid #ccc;border-radius:8px;cursor:pointer;background:white;font-weight:600">강제 새로고침</button></p>`;
+        document.getElementById('content').style.display = 'none';
+      }
+      btn.disabled = false;
+    } else if (data.status === 'loading') {
+      document.getElementById('loading-state').style.display = 'block';
+      document.getElementById('loading-state').innerHTML =
+        `<div class="spinner"></div><p>과업 목록을 불러오는 중…<br><small>Notion에서 데이터를 가져오고 있습니다.</small></p>`;
+      if (!polling) polling = setInterval(() => loadTasks(false), 3000);
+    } else if (data.status === 'error') {
+      document.getElementById('loading-state').style.display = 'block';
+      document.getElementById('loading-state').innerHTML =
+        `<p style="color:#ef4444">❌ API 오류: ${data.message || data.error || '알 수 없는 오류'}<br>
+        <button onclick="loadTasks(true)" style="margin-top:12px;padding:8px 20px;border:1px solid #ccc;border-radius:8px;cursor:pointer;background:white;font-weight:600">재시도</button></p>`;
       btn.disabled = false;
     } else {
       if (!polling) polling = setInterval(() => loadTasks(false), 3000);
     }
   } catch (e) {
-    document.getElementById('loading-state').innerHTML = `<p style="color:#f44336">오류: ${e.message}</p>`;
+    document.getElementById('loading-state').style.display = 'block';
+    document.getElementById('loading-state').innerHTML = `<p style="color:#ef4444">❌ 서버 연결 실패: ${e.message}<br>
+      <small style="color:#888">서버가 실행 중인지 확인하세요.</small><br>
+      <button onclick="loadTasks(true)" style="margin-top:12px;padding:8px 20px;border:1px solid #ccc;border-radius:8px;cursor:pointer;background:white;font-weight:600">재시도</button></p>`;
     btn.disabled = false;
   }
 }
@@ -372,6 +486,21 @@ async function moveToUnlock() {
 
 loadTasks();
 
+// 실시간 타이머 (1초마다 run-timer 업데이트)
+let _timerInterval = null;
+function startTimerUpdates() {
+  if (_timerInterval) clearInterval(_timerInterval);
+  _timerInterval = setInterval(() => {
+    document.querySelectorAll('.run-timer').forEach(el => {
+      let sec = parseInt(el.dataset.start || '0') + 1;
+      el.dataset.start = sec;
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      el.textContent = m > 0 ? `${m}분 ${s}초` : `${s}초`;
+    });
+  }, 1000);
+}
+
 // 작업 중인 항목이 있으면 10초마다 갱신, 아니면 30초마다
 let _dashPoll = null;
 function startDashPolling() {
@@ -379,6 +508,8 @@ function startDashPolling() {
   const hasRunning = allTasks.some(t => t.job_status === 'running');
   const interval = hasRunning ? 10000 : 30000;
   _dashPoll = setInterval(() => loadTasks(false), interval);
+  if (hasRunning) startTimerUpdates();
+  else if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
 }
 
 // 30초마다 새 과제 확인

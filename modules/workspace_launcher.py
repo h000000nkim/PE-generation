@@ -20,6 +20,15 @@ LOCKED_FILE = BASE_DIR / ".locked_tasks.json"
 
 # block_id → workspace path 매핑 (런타임 캐시)
 _workspace_map: dict[str, Path] = {}
+_workspace_prefix_map: dict[str, Path] = {}  # block_id 앞8자 → path
+
+# 서버 시작 시 워크스페이스 디렉토리 사전 매핑
+if BASE_DIR.exists():
+    for _d in BASE_DIR.iterdir():
+        if _d.is_dir() and not _d.name.startswith("."):
+            _parts = _d.name.rsplit("_", 1)
+            if len(_parts) == 2 and len(_parts[1]) >= 8:
+                _workspace_prefix_map[_parts[1][:8]] = _d
 
 
 def get_locked_ids() -> set:
@@ -65,6 +74,10 @@ def create_workspace(task: dict) -> Path:
     ws = BASE_DIR / dirname
     ws.mkdir(parents=True, exist_ok=True)
 
+    # 경로 매핑 즉시 등록
+    _workspace_map[block_id] = ws
+    _workspace_prefix_map[block_id[:8]] = ws
+
     # block_id → workspace 매핑 저장
     _workspace_map[block_id] = ws
 
@@ -89,11 +102,13 @@ def create_workspace(task: dict) -> Path:
                 "WebFetch(*)",
                 "WebSearch(*)",
                 "mcp__word-document-server__*",
+                "mcp__hwpx-document-server__*",
                 "mcp__claude_ai_Canva__*"
             ]
         },
         "enabledMcpjsonServers": [
-            "word-document-server"
+            "word-document-server",
+            "hwpx-document-server"
         ],
         "enableAllProjectMcpServers": True
     }
@@ -353,6 +368,7 @@ STEP 5(과제 작성)는 하지 마세요.
 {{"status": "ok", "analysis": "(analysis.md 내용 전체)"}}"""
 
     block_id = task.get("block_id", "")
+    _save_memo_log(block_id, "사전분석", "STEP 2~4 사전분석 실행")
     return launch_background(workspace, instruction, block_id, "사전분석")
 
 
@@ -384,7 +400,7 @@ def delete_analysis(block_id: str) -> bool:
 def _save_memo_log(block_id: str, action: str, memo: str):
     """추가 지시사항/수정 요청 이력 저장"""
     ws = get_workspace_path(block_id)
-    if not ws or not memo:
+    if not ws:
         return
     log_file = ws / "memo_log.json"
     logs = []
@@ -400,7 +416,7 @@ def _save_memo_log(block_id: str, action: str, memo: str):
 
 
 def _attach_result_to_log(block_id: str, warning: str | None = None):
-    """마지막 로그 항목에 현재 result.json 스냅샷 + 오류 정보 첨부"""
+    """마지막 로그 항목에 현재 result.json 스냅샷 + 오류 정보 + 변경 파일 첨부"""
     ws = get_workspace_path(block_id)
     if not ws:
         return
@@ -412,29 +428,98 @@ def _attach_result_to_log(block_id: str, warning: str | None = None):
         if not logs:
             return
 
+        entry = logs[-1]
+
         # 오류 기록
         if warning:
-            logs[-1]["error"] = warning
-            logs[-1]["result_snapshot"] = logs[-1].get("result_snapshot") or []
+            entry["error"] = warning
+            entry["result_snapshot"] = entry.get("result_snapshot") or []
         else:
-            logs[-1]["error"] = None
-            # 정상 완료 시 result.json 스냅샷 첨부
-            result_file = ws / "result.json"
-            if result_file.exists():
-                result = json.loads(result_file.read_text(encoding="utf-8"))
-                summary = []
-                for o in result.get("outputs", []):
-                    s = {"label": o.get("label", ""), "type": o.get("type", ""), "file": o.get("file", "")}
-                    if o.get("canva_edit_url"):
-                        s["canva_edit_url"] = o["canva_edit_url"]
-                    if o.get("pptx_download_url"):
-                        s["pptx_download_url"] = o["pptx_download_url"]
-                    summary.append(s)
-                logs[-1]["result_snapshot"] = summary
+            entry["error"] = None
+
+            if entry.get("action") == "사전분석":
+                # 사전분석은 analysis.json을 스냅샷으로 첨부
+                analysis_file = ws / "analysis.json"
+                if analysis_file.exists():
+                    entry["result_snapshot"] = [{"label": "사전분석 완료", "type": "text", "file": "analysis.md"}]
+            else:
+                # 정상 완료 시 result.json 스냅샷 첨부
+                result_file = ws / "result.json"
+                if result_file.exists():
+                    result = json.loads(result_file.read_text(encoding="utf-8"))
+                    summary = []
+                    for o in result.get("outputs", []):
+                        s = {"label": o.get("label", ""), "type": o.get("type", ""), "file": o.get("file", "")}
+                        if o.get("canva_edit_url"):
+                            s["canva_edit_url"] = o["canva_edit_url"]
+                        if o.get("pptx_download_url"):
+                            s["pptx_download_url"] = o["pptx_download_url"]
+                        summary.append(s)
+                    entry["result_snapshot"] = summary
+
+                # 수정 요청인 경우: 이 수정으로 변경된 파일 목록 기록
+                if entry.get("action") == "수정 요청":
+                    changed = _detect_changed_files(ws, entry.get("timestamp", ""))
+                    if changed:
+                        entry["changed_files"] = changed
 
         log_file.write_text(json.dumps(logs, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
         pass
+
+
+def _detect_changed_files(ws: Path, since_timestamp: str) -> list[str]:
+    """수정 요청 타임스탬프 이후에 변경된 산출물 파일 목록"""
+    import datetime
+    changed = []
+    try:
+        since = datetime.datetime.strptime(since_timestamp, "%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return []
+
+    for f in ws.iterdir():
+        if not f.is_file():
+            continue
+        if f.suffix in (".md", ".docx", ".hwpx", ".json") and f.name not in (
+            "CLAUDE.md", "analysis.md", "analysis.json", "memo_log.json",
+            "verification.json", ".warning.json"
+        ) and not f.name.startswith("."):
+            try:
+                mtime = datetime.datetime.fromtimestamp(f.stat().st_mtime)
+                if mtime > since:
+                    changed.append(f.name)
+            except Exception:
+                pass
+    return changed
+
+
+def attach_verification_to_log(block_id: str):
+    """최신 검증 결과 전체를 가장 최근 비-사전분석 로그 항목에 첨부"""
+    ws = get_workspace_path(block_id)
+    if not ws:
+        return
+    log_file = ws / "memo_log.json"
+    vf = ws / "verification.json"
+    if not log_file.exists() or not vf.exists():
+        return
+    try:
+        logs = json.loads(log_file.read_text(encoding="utf-8"))
+        if not logs:
+            return
+        verification = json.loads(vf.read_text(encoding="utf-8"))
+        # 사전분석이 아닌 가장 최근 항목을 찾아서 첨부
+        target = None
+        for entry in reversed(logs):
+            if entry.get("action") != "사전분석":
+                target = entry
+                break
+        if target is None:
+            target = logs[-1]  # 사전분석밖에 없으면 마지막에라도 첨부
+        target["verification"] = verification
+        log_file.write_text(json.dumps(logs, ensure_ascii=False, indent=2), encoding="utf-8")
+        logger.info(f"[verify-log] {block_id} 검증 결과 → '{target.get('action')}' ({target.get('timestamp')}) 항목에 첨부")
+    except Exception as e:
+        logger.error(f"[verify-log] {block_id} 첨부 실패: {e}")
 
 
 def get_memo_log(block_id: str) -> list:
@@ -534,15 +619,25 @@ def run_verification(task: dict) -> bool:
 def build_instruction(task: dict, user_memo: str = "") -> str:
     """Claude Code에 전달할 초기 프롬프트 — 캐싱된 분석이 있으면 STEP 5부터 시작"""
     block_id = task.get("block_id", "")
-    if user_memo:
-        _save_memo_log(block_id, "초안 작성", user_memo)
+    _save_memo_log(block_id, "초안 작성", user_memo or "(추가 지시 없음)")
     _refresh_claude_md(task)
     analysis = get_analysis(block_id)
+
+    # 파일명 생성용 정보
+    subj = (task.get('subject', '') or '').replace(' ', '')
+    name = task.get('name', '')
+    filename_hint = f"예시: {subj}_주제_{name}.docx 또는 {subj}_주제_{name}.hwpx" if subj and name else ""
 
     if analysis and analysis.get("status") == "ok":
         # 사전분석 완료 → STEP 5만 실행
         instruction = f"""CLAUDE.md를 읽고, files/ 폴더의 첨부파일을 확인한 뒤,
 아래 사전분석 결과를 바탕으로 **STEP 5(과제 작성)**를 바로 수행해주세요.
+
+⚠️⚠️ 최우선 규칙 — 파일명:
+- 산출물 파일명은 반드시 `과목_과제제목_이름.확장자` 형식으로 저장할 것
+- {filename_hint}
+- **result.docx, result.md, result.hwpx 등 임시 이름 절대 금지**
+- 사전분석의 "저장 경로" 항목에 result.docx라 적혀 있어도 무시하고 위 규칙을 따를 것
 
 ## 사전분석 결과 (STEP 3 + STEP 4 완료)
 {analysis['analysis']}
@@ -560,6 +655,11 @@ def build_instruction(task: dict, user_memo: str = "") -> str:
         # 사전분석 없음 → 전체 수행
         instruction = f"""CLAUDE.md를 읽고, files/ 폴더의 첨부파일을 모두 분석한 뒤,
 STEP 2 → STEP 3 → STEP 4 → STEP 5 순서로 작업을 수행해주세요.
+
+⚠️⚠️ 최우선 규칙 — 파일명:
+- 산출물 파일명은 반드시 `과목_과제제목_이름.확장자` 형식으로 저장할 것
+- {filename_hint}
+- **result.docx, result.md, result.hwpx 등 임시 이름 절대 금지**
 
 과제: {task.get('title', '')}
 과목: {task.get('subject', '')}
@@ -592,7 +692,7 @@ def build_revision_instruction(task: dict, revision_memo: str) -> str:
     existing_files = []
     if ws:
         for f in ws.iterdir():
-            if f.is_file() and f.suffix in (".md", ".docx", ".txt") and f.name not in ("CLAUDE.md", "analysis.md", ".prompt.txt"):
+            if f.is_file() and f.suffix in (".md", ".docx", ".hwpx", ".txt") and f.name not in ("CLAUDE.md", "analysis.md", ".prompt.txt"):
                 existing_files.append(f.name)
         result_file = ws / "result.json"
         if result_file.exists():
@@ -739,13 +839,18 @@ def launch_background(workspace_path: Path, instruction: str, block_id: str, lab
                 _save_warning(ws, job_id, label, warning)
             else:
                 _clear_warning(ws)
-            # 결과물 이력 기록 (오류 포함)
-            _attach_result_to_log(block_id, warning)
+            # 검증이 아닌 경우만 결과물 이력 기록
+            if label != "검증":
+                _attach_result_to_log(block_id, warning)
             # 완료된 job의 임시 파일 정리 (최신 1개만 유지)
             _cleanup_job_files(Path(ws))
-            # 초안 작성 성공 시 자동 검증 트리거
-            if label == "초안 작성" and proc.returncode == 0 and not warning:
+            # 초안 작성 또는 수정 성공 시 자동 검증 트리거
+            if label in ("초안 작성", "수정") and proc.returncode == 0 and not warning:
                 _auto_verify(block_id)
+            # 검증 완료 시 결과를 지시이력에 첨부
+            if label == "검증" and proc.returncode == 0:
+                attach_verification_to_log(block_id)
+                logger.info(f"[verify] {block_id} 검증 결과 이력 첨부 완료")
 
         threading.Thread(target=_watch, daemon=True).start()
         return True
@@ -839,6 +944,8 @@ def _detect_issues(output_file: Path, error_file: Path) -> str | None:
                 issues.append("Canva MCP 권한 문제")
             elif "word" in text.lower() or "Word" in text:
                 issues.append("Word MCP 권한 문제")
+            elif "hwpx" in text.lower() or "HWPX" in text:
+                issues.append("HWPX MCP 권한 문제")
             else:
                 issues.append("MCP 권한 문제")
         # 인증 만료
@@ -895,15 +1002,21 @@ def get_job_status(block_id: str) -> dict | None:
 
 
 def get_workspace_path(block_id: str) -> Path | None:
-    """block_id로 워크스페이스 경로 조회 (매핑 캐시 + 디스크 탐색)"""
+    """block_id로 워크스페이스 경로 조회 (매핑 캐시 → 사전 매핑 → 디스크 탐색)"""
     if block_id in _workspace_map:
         return _workspace_map[block_id]
-    # 디스크에서 탐색 (block_id 앞 8자로 매칭)
+    # 사전 매핑에서 즉시 찾기
     short = block_id[:8]
+    if short in _workspace_prefix_map:
+        path = _workspace_prefix_map[short]
+        _workspace_map[block_id] = path
+        return path
+    # 폴백: 디스크 탐색 (새로 생성된 워크스페이스)
     if BASE_DIR.exists():
         for d in BASE_DIR.iterdir():
             if d.is_dir() and short in d.name:
                 _workspace_map[block_id] = d
+                _workspace_prefix_map[short] = d
                 return d
     return None
 

@@ -2,6 +2,12 @@
   "outputs": [
     {
       "label": "보고서 (인공지능의 활용 사례와 나의 진로 탐구)",
+      "type": "hwpx",
+      "file": "result.hwpx",
+      "hwpx_path": "result.hwpx"
+    },
+    {
+      "label": "보고서 (Word 버전)",
       "type": "docx",
       "file": "result.docx",
       "docx_path": "result.docx"

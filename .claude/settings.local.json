@@ -12,11 +12,14 @@
       "mcp__claude_ai_Canva__generate-design-structured",
       "mcp__claude_ai_Canva__create-design-from-candidate",
       "mcp__claude_ai_Canva__export-design",
-      "WebSearch"
+      "WebSearch",
+      "mcp__word-document-server__get_document_text",
+      "mcp__hwpx-document-server__*"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
-    "word-document-server"
-  ],
-  "enableAllProjectMcpServers": true
+    "word-document-server",
+    "hwpx-document-server"
+  ]
 }
